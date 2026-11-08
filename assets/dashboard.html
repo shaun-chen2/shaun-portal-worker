@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>陈帅帅 · 常用网页总览</title>
+  <style>/*STYLES*/</style>
+</head>
+<body>
+  <main id="dashboard">
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo small">★</span>
+        <h1>常用网页总览</h1>
+      </div>
+      <div class="actions">
+        <input id="search" type="search" placeholder="搜索书签 / 网址…" />
+        <button id="logout" class="ghost" title="退出登录">退出</button>
+      </div>
+    </header>
+    <div id="content" class="content"></div>
+    <footer class="foot">数据来自 Firefox · Cloudflare Workers 服务端鉴权</footer>
+  </main>
+  <script>
+    function escapeHtml(s) {
+      return String(s == null ? "" : s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+    function hostOf(url) {
+      try { return new URL(url).hostname; } catch (e) { return ""; }
+    }
+    function favicon(url) {
+      const h = hostOf(url);
+      return h ? "https://icons.duckduckgo.com/ip3/" + h + ".ico" : "";
+    }
+    function cardHtml(site) {
+      const url = site.url || "";
+      const title = site.title || url;
+      return (
+        '<a class="card" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' +
+        '<img class="fav" src="' + escapeHtml(favicon(url)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
+        '<span class="title">' + escapeHtml(title) + "</span>" +
+        '<span class="url">' + escapeHtml(hostOf(url)) + "</span>" +
+        "</a>"
+      );
+    }
+    function sectionHtml(title, sites) {
+      if (!sites.length) return "";
+      return (
+        '<section class="group"><h2>' + escapeHtml(title) +
+        ' <span class="count">' + sites.length + "</span></h2>" +
+        '<div class="grid">' + sites.map(cardHtml).join("") + "</div></section>"
+      );
+    }
+    function render(filter) {
+      const data = window.PORTAL_DATA || { folders: [], frequent: [] };
+      const q = (filter || "").trim().toLowerCase();
+      const match = (s) =>
+        !q ||
+        (s.title || "").toLowerCase().includes(q) ||
+        (s.url || "").toLowerCase().includes(q);
+      let html = "";
+      if (data.frequent && data.frequent.length) {
+        html += sectionHtml("常用站点", data.frequent.filter(match));
+      }
+      (data.folders || []).forEach((f) => {
+        html += sectionHtml(f.name, (f.sites || []).filter(match));
+      });
+      document.getElementById("content").innerHTML =
+        html || '<p class="empty">没有匹配的结果</p>';
+    }
+    document.getElementById("search").addEventListener("input", (e) => render(e.target.value));
+    document.getElementById("logout").addEventListener("click", async () => {
+      try { await fetch("/logout", { method: "POST", credentials: "same-origin" }); } catch (e) {}
+      location.href = "/";
+    });
+    async function init() {
+      try {
+        const r = await fetch("/data", { credentials: "same-origin" });
+        if (r.status !== 200) { location.href = "/"; return; }
+        window.PORTAL_DATA = await r.json();
+      } catch (e) { location.href = "/"; return; }
+      render("");
+      document.getElementById("search").focus();
+    }
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "shaun-portal-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "wrangler dev",
+    "deploy": "node build.mjs && wrangler deploy"
+  }
+}

@@ -1,0 +1,14 @@
+name = "shaun-portal"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# 登录凭据（非机密，仅用户名与密码的 SHA-256 哈希）
+[vars]
+AUTH_USERNAME = "陈帅帅"
+AUTH_HASH = "1fcc8a52554dd357f19f4aab900df14e912dfea598f9831453445794d0ac48a8"
+
+# 会话签名密钥（机密）：本地放 .dev.vars，生产用 `wrangler secret put SESSION_SECRET`
+# SESSION_SECRET = "..."
+
+# 自定义域名（需 shaun.uk 在本 Cloudflare 账户且 token 具备 Zone:DNS 权限）
+# routes = ["shaun.uk/*"]

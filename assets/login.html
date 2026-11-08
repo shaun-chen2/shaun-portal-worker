@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>陈帅帅 · 常用网页总览</title>
+  <style>/*STYLES*/</style>
+</head>
+<body>
+  <section class="login-wrap">
+    <form id="loginForm" class="login-card" autocomplete="on">
+      <div class="logo">★</div>
+      <h1>常用网页总览</h1>
+      <p class="sub">登录后查看你的书签与常用站点</p>
+      <input id="username" type="text" placeholder="用户名" autocomplete="username" required />
+      <input id="password" type="password" placeholder="密码" autocomplete="current-password" required />
+      <button type="submit" id="loginBtn">登 录</button>
+      <p id="loginError" class="error" hidden>用户名或密码错误</p>
+    </form>
+  </section>
+  <script>
+    const errEl = document.getElementById("loginError");
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const btn = document.getElementById("loginBtn");
+      errEl.hidden = true;
+      btn.disabled = true;
+      btn.textContent = "校验中…";
+      try {
+        const r = await fetch("/login", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        if (r.ok) {
+          location.href = "/";
+        } else {
+          errEl.hidden = false;
+        }
+      } catch (e) {
+        errEl.textContent = "网络错误，请重试";
+        errEl.hidden = false;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "登 录";
+      }
+    });
+  </script>
+</body>
+</html>
