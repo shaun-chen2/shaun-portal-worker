@@ -17,7 +17,19 @@ if (!m) {
   console.error("无法从 data.js 解析 PORTAL_DATA");
   process.exit(1);
 }
-const dataJson = m[1];
+const dataObj = JSON.parse(m[1]);
+
+// 合并 Firefox cookie 主机名（仅域名，绝不读取 cookie 值）
+const cookiesPath = BASE + "/cookies.json";
+let cookieSites = [];
+try {
+  const cj = JSON.parse(readFileSync(cookiesPath, "utf8"));
+  cookieSites = (cj.sites || []).map((s) => ({ host: s.host, count: s.count || 0 }));
+} catch (e) {
+  console.warn("cookies.json 读取失败，跳过 cookie 分区:", e.message);
+}
+dataObj.cookies = cookieSites;
+const dataJson = JSON.stringify(dataObj);
 
 mkdirSync(BASE + "/src", { recursive: true });
 writeFileSync(
@@ -27,4 +39,4 @@ writeFileSync(
 );
 writeFileSync(BASE + "/src/data.js", "export const DATA = " + dataJson + ";\n");
 
-console.log("built src/ui.js + src/data.js  OK");
+console.log("built src/ui.js + src/data.js OK | cookies sites:", cookieSites.length);

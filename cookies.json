@@ -1,0 +1,606 @@
+{
+  "generated": "firefox cookies hostnames only (values never read)",
+  "total_distinct": 310,
+  "sites": [
+    {
+      "host": "qvdt3feo.com",
+      "count": 46,
+      "httponly": 0,
+      "secure": 46
+    },
+    {
+      "host": "dash.cloudflare.com",
+      "count": 37,
+      "httponly": 23,
+      "secure": 25
+    },
+    {
+      "host": "bilibili.com",
+      "count": 27,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "bing.com",
+      "count": 27,
+      "httponly": 3,
+      "secure": 25
+    },
+    {
+      "host": "douyin.com",
+      "count": 23,
+      "httponly": 2,
+      "secure": 4
+    },
+    {
+      "host": "nvidia.com",
+      "count": 23,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "www.cloudflare.com",
+      "count": 23,
+      "httponly": 18,
+      "secure": 22
+    },
+    {
+      "host": "google.com",
+      "count": 21,
+      "httponly": 12,
+      "secure": 14
+    },
+    {
+      "host": "poki.com",
+      "count": 20,
+      "httponly": 1,
+      "secure": 6
+    },
+    {
+      "host": "bloxd.io",
+      "count": 17,
+      "httponly": 1,
+      "secure": 4
+    },
+    {
+      "host": "claude.ai",
+      "count": 17,
+      "httponly": 4,
+      "secure": 15
+    },
+    {
+      "host": "msn.cn",
+      "count": 17,
+      "httponly": 10,
+      "secure": 14
+    },
+    {
+      "host": "noip.com",
+      "count": 17,
+      "httponly": 0,
+      "secure": 10
+    },
+    {
+      "host": "bambulab.com",
+      "count": 15,
+      "httponly": 1,
+      "secure": 6
+    },
+    {
+      "host": "c.bing.com",
+      "count": 14,
+      "httponly": 0,
+      "secure": 14
+    },
+    {
+      "host": "inmobi.com",
+      "count": 14,
+      "httponly": 0,
+      "secure": 14
+    },
+    {
+      "host": "convertio.co",
+      "count": 13,
+      "httponly": 1,
+      "secure": 6
+    },
+    {
+      "host": "github.com",
+      "count": 13,
+      "httponly": 7,
+      "secure": 13
+    },
+    {
+      "host": "hm.baidu.com",
+      "count": 12,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "makerworld.com",
+      "count": 12,
+      "httponly": 1,
+      "secure": 6
+    },
+    {
+      "host": "csdn.net",
+      "count": 11,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "www.nvidia.com",
+      "count": 11,
+      "httponly": 0,
+      "secure": 11
+    },
+    {
+      "host": "baidu.com",
+      "count": 10,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "cloudflare.com",
+      "count": 10,
+      "httponly": 3,
+      "secure": 7
+    },
+    {
+      "host": "photopea.com",
+      "count": 10,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "sportradarserving.com",
+      "count": 10,
+      "httponly": 0,
+      "secure": 10
+    },
+    {
+      "host": "vjudge.net",
+      "count": 10,
+      "httponly": 1,
+      "secure": 4
+    },
+    {
+      "host": "w3schools.com",
+      "count": 10,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "www.douyin.com",
+      "count": 10,
+      "httponly": 1,
+      "secure": 5
+    },
+    {
+      "host": "amx1.net",
+      "count": 9,
+      "httponly": 9,
+      "secure": 9
+    },
+    {
+      "host": "arealme.com",
+      "count": 9,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "imgdiet.com",
+      "count": 9,
+      "httponly": 1,
+      "secure": 4
+    },
+    {
+      "host": "live.com",
+      "count": 9,
+      "httponly": 6,
+      "secure": 9
+    },
+    {
+      "host": "x.ai",
+      "count": 9,
+      "httponly": 2,
+      "secure": 2
+    },
+    {
+      "host": "bambulab.cn",
+      "count": 8,
+      "httponly": 5,
+      "secure": 5
+    },
+    {
+      "host": "jd.com",
+      "count": 8,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "linkedin.com",
+      "count": 8,
+      "httponly": 2,
+      "secure": 8
+    },
+    {
+      "host": "login.live.com",
+      "count": 8,
+      "httponly": 6,
+      "secure": 8
+    },
+    {
+      "host": "pippio.com",
+      "count": 8,
+      "httponly": 0,
+      "secure": 8
+    },
+    {
+      "host": "qianwen.com",
+      "count": 8,
+      "httponly": 1,
+      "secure": 4
+    },
+    {
+      "host": "qwen.com",
+      "count": 8,
+      "httponly": 1,
+      "secure": 3
+    },
+    {
+      "host": "uncn.jp",
+      "count": 8,
+      "httponly": 0,
+      "secure": 8
+    },
+    {
+      "host": "youku.com",
+      "count": 8,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "advolve.io",
+      "count": 7,
+      "httponly": 7,
+      "secure": 7
+    },
+    {
+      "host": "jimeng.jianying.com",
+      "count": 7,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "qq.com",
+      "count": 7,
+      "httponly": 0,
+      "secure": 2
+    },
+    {
+      "host": "cloud.tencent.com",
+      "count": 6,
+      "httponly": 0,
+      "secure": 2
+    },
+    {
+      "host": "codeforces.com",
+      "count": 6,
+      "httponly": 2,
+      "secure": 1
+    },
+    {
+      "host": "company-target.com",
+      "count": 6,
+      "httponly": 6,
+      "secure": 6
+    },
+    {
+      "host": "doubao.com",
+      "count": 6,
+      "httponly": 3,
+      "secure": 3
+    },
+    {
+      "host": "id5-sync.com",
+      "count": 6,
+      "httponly": 1,
+      "secure": 6
+    },
+    {
+      "host": "mmstat.com",
+      "count": 6,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "zhihu.com",
+      "count": 6,
+      "httponly": 1,
+      "secure": 1
+    },
+    {
+      "host": "www.workbuddy.cn",
+      "count": 6,
+      "httponly": 4,
+      "secure": 4
+    },
+    {
+      "host": "bbsmc.net",
+      "count": 5,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "cpstest.org",
+      "count": 5,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "ip.cn",
+      "count": 5,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "makerworld.com.cn",
+      "count": 5,
+      "httponly": 2,
+      "secure": 2
+    },
+    {
+      "host": "mcmod.cn",
+      "count": 5,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "mozilla.org",
+      "count": 5,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "richaudience.com",
+      "count": 5,
+      "httponly": 5,
+      "secure": 5
+    },
+    {
+      "host": "silvergames.com",
+      "count": 5,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "twitter.com",
+      "count": 5,
+      "httponly": 1,
+      "secure": 5
+    },
+    {
+      "host": "xiaoe-tech.com",
+      "count": 5,
+      "httponly": 5,
+      "secure": 5
+    },
+    {
+      "host": "accounts.google.com",
+      "count": 5,
+      "httponly": 5,
+      "secure": 5
+    },
+    {
+      "host": "www.msn.cn",
+      "count": 5,
+      "httponly": 3,
+      "secure": 2
+    },
+    {
+      "host": "www.office.com",
+      "count": 5,
+      "httponly": 4,
+      "secure": 5
+    },
+    {
+      "host": "17173.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "3lift.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "a-mx.com",
+      "count": 4,
+      "httponly": 4,
+      "secure": 4
+    },
+    {
+      "host": "bidr.io",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "claude.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "codebuddy.cn",
+      "count": 4,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "contextweb.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "deepintent.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "dnacdn.net",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "login.microsoftonline.com",
+      "count": 4,
+      "httponly": 3,
+      "secure": 4
+    },
+    {
+      "host": "loudecho.ai",
+      "count": 4,
+      "httponly": 4,
+      "secure": 4
+    },
+    {
+      "host": "m365.cloud.microsoft",
+      "count": 4,
+      "httponly": 2,
+      "secure": 4
+    },
+    {
+      "host": "mi.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "onaudience.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "rfihub.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "sitescout.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "tencent.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 2
+    },
+    {
+      "host": "workbuddy.cn",
+      "count": 4,
+      "httponly": 0,
+      "secure": 1
+    },
+    {
+      "host": "wp.pl",
+      "count": 4,
+      "httponly": 0,
+      "secure": 4
+    },
+    {
+      "host": "wurstclient.net",
+      "count": 4,
+      "httponly": 1,
+      "secure": 4
+    },
+    {
+      "host": "www.doubao.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "drive.google.com",
+      "count": 4,
+      "httponly": 3,
+      "secure": 4
+    },
+    {
+      "host": "meeting.tencent.com",
+      "count": 4,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "360yield.com",
+      "count": 3,
+      "httponly": 3,
+      "secure": 3
+    },
+    {
+      "host": "a-mo.net",
+      "count": 3,
+      "httponly": 3,
+      "secure": 3
+    },
+    {
+      "host": "atcoder.jp",
+      "count": 3,
+      "httponly": 1,
+      "secure": 1
+    },
+    {
+      "host": "codemao.cn",
+      "count": 3,
+      "httponly": 1,
+      "secure": 0
+    },
+    {
+      "host": "dotomi.com",
+      "count": 3,
+      "httponly": 0,
+      "secure": 3
+    },
+    {
+      "host": "hydro.ac",
+      "count": 3,
+      "httponly": 1,
+      "secure": 0
+    },
+    {
+      "host": "ipshudi.com",
+      "count": 3,
+      "httponly": 0,
+      "secure": 0
+    },
+    {
+      "host": "iqzonertb.live",
+      "count": 3,
+      "httponly": 3,
+      "secure": 3
+    },
+    {
+      "host": "mail.qq.com",
+      "count": 3,
+      "httponly": 2,
+      "secure": 2
+    },
+    {
+      "host": "miaozhen.com",
+      "count": 3,
+      "httponly": 0,
+      "secure": 3
+    }
+  ]
+}

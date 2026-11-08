@@ -37,16 +37,32 @@
       const h = hostOf(url);
       return h ? "https://icons.duckduckgo.com/ip3/" + h + ".ico" : "";
     }
-    function cardHtml(site) {
+    function cardHtml(site, badge) {
       const url = site.url || "";
       const title = site.title || url;
+      const badgeHtml = badge ? '<span class="badge">已登录</span>' : "";
       return (
         '<a class="card" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' +
+        badgeHtml +
         '<img class="fav" src="' + escapeHtml(favicon(url)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
         '<span class="title">' + escapeHtml(title) + "</span>" +
         '<span class="url">' + escapeHtml(hostOf(url)) + "</span>" +
         "</a>"
       );
+    }
+    // Firefox cookie 主机名集合：用于「已登录」角标（仅域名，未读取任何 cookie 值）
+    function buildCookieSet(data) {
+      const set = new Set();
+      (data.cookies || []).forEach((c) => { if (c.host) set.add(c.host); });
+      return set;
+    }
+    function isLoggedIn(url, cookieSet) {
+      const h = hostOf(url);
+      if (!h) return false;
+      for (const ch of cookieSet) {
+        if (h === ch || h.endsWith("." + ch)) return true;
+      }
+      return false;
     }
     function sectionHtml(title, sites) {
       if (!sites.length) return "";
@@ -59,17 +75,29 @@
     function render(filter) {
       const data = window.PORTAL_DATA || { folders: [], frequent: [] };
       const q = (filter || "").trim().toLowerCase();
-      const match = (s) =>
-        !q ||
-        (s.title || "").toLowerCase().includes(q) ||
-        (s.url || "").toLowerCase().includes(q);
+      const match = (s) => {
+        const t = (s.title || s.host || "").toLowerCase();
+        const u = (s.url || s.host || "").toLowerCase();
+        return !q || t.includes(q) || u.includes(q);
+      };
+      const cookieSet = buildCookieSet(data);
+      // 现有站点：匹配 cookie 域名则打「已登录」角标
+      const withBadge = (list) =>
+        (list || []).filter(match).map((s) => ({ ...s, _badge: isLoggedIn(s.url || "", cookieSet) }));
       let html = "";
       if (data.frequent && data.frequent.length) {
-        html += sectionHtml("常用站点", data.frequent.filter(match));
+        html += sectionHtml("常用站点", withBadge(data.frequent));
       }
       (data.folders || []).forEach((f) => {
-        html += sectionHtml(f.name, (f.sites || []).filter(match));
+        html += sectionHtml(f.name, withBadge(f.sites || []));
       });
+      // Firefox 已登录站点（来自 cookie 主机名，仅域名）
+      if (data.cookies && data.cookies.length) {
+        const cookieCards = data.cookies
+          .filter(match)
+          .map((c) => ({ url: "https://" + c.host + "/", title: c.host, host: c.host }));
+        html += sectionHtml("Firefox 已登录站点", cookieCards);
+      }
       document.getElementById("content").innerHTML =
         html || '<p class="empty">没有匹配的结果</p>';
     }
