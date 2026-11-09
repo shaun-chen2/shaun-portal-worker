@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>陈帅帅 · 常用网页总览</title>
+  <title>我的总览</title>
   <style>/*STYLES*/</style>
 </head>
 <body>
@@ -11,24 +11,49 @@
     <header class="topbar">
       <div class="brand">
         <span class="logo small">★</span>
-        <h1>常用网页总览</h1>
+        <h1>我的总览</h1>
       </div>
       <div class="actions">
         <input id="search" type="search" placeholder="搜索书签 / 网址…" />
+        <span id="userChip" class="chip"></span>
         <button id="logout" class="ghost" title="退出登录">退出</button>
       </div>
     </header>
+
+    <div class="toolbar">
+      <button id="addFolder" class="primary">＋ 添加文件夹</button>
+    </div>
+
+    <section id="invitePanel" class="panel" hidden>
+      <div class="panel-head">
+        <h2>邀请码管理</h2>
+        <button id="genInvite" class="primary sm">＋ 生成邀请码</button>
+      </div>
+      <div id="inviteList" class="invite-list"></div>
+    </section>
+
     <div id="content" class="content"></div>
-    <footer class="foot">数据来自 Firefox · Cloudflare Workers 服务端鉴权</footer>
+    <footer class="foot">Cloudflare Workers · 数据按账号隔离存储</footer>
   </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <h3 id="modalTitle"></h3>
+      <div id="modalBody"></div>
+      <div class="modal-actions">
+        <button id="modalCancel" class="ghost">取消</button>
+        <button id="modalSave" class="primary">保存</button>
+      </div>
+    </div>
+  </div>
+
   <script>
+    const state = { me: null, data: { folders: [] }, filter: "" };
+
     function escapeHtml(s) {
       return String(s == null ? "" : s)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
     }
     function hostOf(url) {
       try { return new URL(url).hostname; } catch (e) { return ""; }
@@ -37,55 +62,210 @@
       const h = hostOf(url);
       return h ? "https://icons.duckduckgo.com/ip3/" + h + ".ico" : "";
     }
-    function cardHtml(site) {
-      const url = site.url || "";
-      const title = site.title || url;
-      return (
-        '<a class="card" href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' +
-        '<img class="fav" src="' + escapeHtml(favicon(url)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
-        '<span class="title">' + escapeHtml(title) + "</span>" +
-        '<span class="url">' + escapeHtml(hostOf(url)) + "</span>" +
-        "</a>"
-      );
+    function matchSite(s) {
+      const q = state.filter.trim().toLowerCase();
+      if (!q) return true;
+      return (s.title || "").toLowerCase().includes(q) || (s.url || "").toLowerCase().includes(q);
     }
-    function sectionHtml(title, sites) {
-      if (!sites.length) return "";
-      return (
-        '<section class="group"><h2>' + escapeHtml(title) +
-        ' <span class="count">' + sites.length + "</span></h2>" +
-        '<div class="grid">' + sites.map(cardHtml).join("") + "</div></section>"
-      );
-    }
-    function render(filter) {
-      const data = window.PORTAL_DATA || { folders: [], frequent: [] };
-      const q = (filter || "").trim().toLowerCase();
-      const match = (s) =>
-        !q ||
-        (s.title || "").toLowerCase().includes(q) ||
-        (s.url || "").toLowerCase().includes(q);
-      let html = "";
-      if (data.frequent && data.frequent.length) {
-        html += sectionHtml("常用站点", data.frequent.filter(match));
+
+    async function api(path, opts) {
+      const r = await fetch(path, Object.assign({
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+      }, opts));
+      if (r.status === 401) { location.href = "/"; throw new Error("unauthorized"); }
+      if (!r.ok) {
+        let msg = "操作失败";
+        try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (e) {}
+        throw new Error(msg);
       }
-      (data.folders || []).forEach((f) => {
-        html += sectionHtml(f.name, (f.sites || []).filter(match));
-      });
-      document.getElementById("content").innerHTML =
-        html || '<p class="empty">没有匹配的结果</p>';
+      const ct = r.headers.get("content-type") || "";
+      return ct.includes("json") ? r.json() : null;
     }
-    document.getElementById("search").addEventListener("input", (e) => render(e.target.value));
+
+    function cardHtml(site, folderId) {
+      return (
+        '<div class="card" data-site="' + site.id + '">' +
+        '<div class="card-tools">' +
+        '<button class="icon" data-act="edit-site" data-site="' + site.id + '" data-folder="' + folderId + '" title="编辑">✎</button>' +
+        '<button class="icon danger" data-act="del-site" data-site="' + site.id + '" data-folder="' + folderId + '" title="删除">✕</button>' +
+        "</div>" +
+        '<a class="card-link" href="' + escapeHtml(site.url) + '" target="_blank" rel="noopener noreferrer">' +
+        '<img class="fav" src="' + escapeHtml(favicon(site.url)) + '" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'">' +
+        '<span class="title">' + escapeHtml(site.title) + "</span>" +
+        '<span class="url">' + escapeHtml(hostOf(site.url)) + "</span>" +
+        "</a></div>"
+      );
+    }
+    function sectionHtml(folder) {
+      const sites = folder.sites.filter(matchSite);
+      if (!sites.length && state.filter.trim()) return "";
+      return (
+        '<section class="group" data-folder="' + folder.id + '">' +
+        "<h2><span class=\"fname\">" + escapeHtml(folder.name) + "</span>" +
+        '<span class="count">' + folder.sites.length + "</span>" +
+        '<span class="f-tools">' +
+        '<button class="icon" data-act="add-site" data-folder="' + folder.id + '" title="添加站点">＋</button>' +
+        '<button class="icon" data-act="edit-folder" data-folder="' + folder.id + '" title="重命名">✎</button>' +
+        '<button class="icon danger" data-act="del-folder" data-folder="' + folder.id + '" title="删除">✕</button>' +
+        "</span></h2>" +
+        '<div class="grid">' + sites.map((s) => cardHtml(s, folder.id)).join("") + "</div>" +
+        "</section>"
+      );
+    }
+    function render() {
+      const c = document.getElementById("content");
+      if (!state.data.folders.length) {
+        c.innerHTML = '<p class="empty">还没有文件夹，点上方「＋ 添加文件夹」开始</p>';
+        return;
+      }
+      const html = state.data.folders.map(sectionHtml).join("");
+      c.innerHTML = html || '<p class="empty">没有匹配的结果</p>';
+    }
+
+    // ---------- 弹窗 ----------
+    function openModal(title, fields, onSave, saveLabel) {
+      const modal = document.getElementById("modal");
+      document.getElementById("modalTitle").textContent = title;
+      const body = document.getElementById("modalBody");
+      body.innerHTML = fields.map((f) => {
+        if (f.type === "select") {
+          const opts = (f.options || []).map((o) =>
+            '<option value="' + escapeHtml(o.value) + '"' + (o.value === f.value ? " selected" : "") + ">" + escapeHtml(o.label) + "</option>"
+          ).join("");
+          return '<label class="field"><span>' + escapeHtml(f.label) + "</span><select id=\"mf_" + f.name + "\">" + opts + "</select></label>";
+        }
+        return '<label class="field"><span>' + escapeHtml(f.label) + "</span>" +
+          '<input id="mf_' + f.name + '" type="' + (f.type || "text") + '" value="' + escapeHtml(f.value || "") + '" placeholder="' + escapeHtml(f.placeholder || "") + '" /></label>';
+      }).join("");
+      modal.hidden = false;
+      const saveBtn = document.getElementById("modalSave");
+      saveBtn.textContent = saveLabel || "保存";
+      saveBtn.onclick = async () => {
+        const vals = {};
+        for (const f of fields) vals[f.name] = document.getElementById("mf_" + f.name).value.trim();
+        try { await onSave(vals); modal.hidden = true; }
+        catch (e) { alert(e.message || "操作失败"); }
+      };
+      document.getElementById("modalCancel").onclick = () => { modal.hidden = true; };
+      const first = body.querySelector("input,select");
+      if (first) first.focus();
+    }
+    document.getElementById("modal").addEventListener("click", (e) => {
+      if (e.target.id === "modal") document.getElementById("modal").hidden = true;
+    });
+
+    // ---------- 操作 ----------
+    async function refresh() { state.data = await api("/data"); render(); }
+
+    function onAddFolder() {
+      openModal("添加文件夹", [{ name: "name", label: "文件夹名称", placeholder: "例如：工作" }],
+        async (v) => { if (!v.name) throw new Error("名称不能为空"); await api("/folders", { method: "POST", body: JSON.stringify(v) }); await refresh(); });
+    }
+    function onEditFolder(id) {
+      const f = state.data.folders.find((x) => x.id === id);
+      if (!f) return;
+      openModal("重命名文件夹", [{ name: "name", label: "新名称", value: f.name }],
+        async (v) => { if (!v.name) throw new Error("名称不能为空"); await api("/folders/" + id, { method: "PUT", body: JSON.stringify(v) }); await refresh(); });
+    }
+    async function onDelFolder(id) {
+      const f = state.data.folders.find((x) => x.id === id);
+      if (!f) return;
+      if (!confirm("删除文件夹「" + f.name + "」及其下 " + f.sites.length + " 个站点？")) return;
+      await api("/folders/" + id, { method: "DELETE" });
+      await refresh();
+    }
+    function onAddSite(folderId) {
+      openModal("添加站点", [
+        { name: "title", label: "名称", placeholder: "例如：GitHub" },
+        { name: "url", label: "网址", placeholder: "https://..." },
+      ], async (v) => {
+        if (!v.title || !v.url) throw new Error("请填写完整");
+        try { new URL(v.url); } catch (e) { throw new Error("网址格式不正确（需含 http/https）"); }
+        await api("/folders/" + folderId + "/sites", { method: "POST", body: JSON.stringify(v) });
+        await refresh();
+      });
+    }
+    function onEditSite(siteId) {
+      let found = null, inFolder = null;
+      for (const f of state.data.folders) {
+        const s = f.sites.find((x) => x.id === siteId);
+        if (s) { found = s; inFolder = f; break; }
+      }
+      if (!found) return;
+      const opts = state.data.folders.map((f) => ({ value: f.id, label: f.name }));
+      openModal("编辑站点", [
+        { name: "title", label: "名称", value: found.title },
+        { name: "url", label: "网址", value: found.url, placeholder: "https://..." },
+        { name: "folderId", label: "所属文件夹", type: "select", value: inFolder.id, options: opts },
+      ], async (v) => {
+        if (!v.title || !v.url) throw new Error("请填写完整");
+        try { new URL(v.url); } catch (e) { throw new Error("网址格式不正确（需含 http/https）"); }
+        if (!v.folderId) throw new Error("请选择文件夹");
+        await api("/sites/" + siteId, { method: "PUT", body: JSON.stringify(v) });
+        await refresh();
+      });
+    }
+    async function onDelSite(siteId) {
+      if (!confirm("删除该站点？")) return;
+      await api("/sites/" + siteId, { method: "DELETE" });
+      await refresh();
+    }
+
+    document.getElementById("content").addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-act]");
+      if (!btn) return;
+      e.preventDefault();
+      const act = btn.dataset.act, fid = btn.dataset.folder, sid = btn.dataset.site;
+      if (act === "add-site") onAddSite(fid);
+      else if (act === "edit-folder") onEditFolder(fid);
+      else if (act === "del-folder") onDelFolder(fid);
+      else if (act === "edit-site") onEditSite(sid);
+      else if (act === "del-site") onDelSite(sid);
+    });
+    document.getElementById("addFolder").addEventListener("click", onAddFolder);
+
+    // ---------- 邀请码（管理员） ----------
+    async function loadInvites() {
+      const r = await api("/invite");
+      const box = document.getElementById("inviteList");
+      if (!r.invites.length) { box.innerHTML = '<p class="empty sm">还没有邀请码，点「生成邀请码」创建一个</p>'; return; }
+      box.innerHTML = r.invites.map((inv) => {
+        const used = inv.usedBy ? '<span class="tag used">已使用 · ' + escapeHtml(inv.usedBy) + "</span>"
+          : '<span class="tag ok">未使用</span>';
+        return '<div class="invite-row"><code>' + escapeHtml(inv.code) + "</code>" + used + "</div>";
+      }).join("");
+    }
+    async function onGenInvite() {
+      const r = await api("/invite", { method: "POST" });
+      await loadInvites();
+      if (r.code) {
+        const copy = confirm("邀请码已生成：" + r.code + "\n\n点「确定」复制，把邀请码发给对方即可注册。");
+        if (copy) { try { await navigator.clipboard.writeText(r.code); } catch (e) {} }
+      }
+    }
+    document.getElementById("genInvite").addEventListener("click", onGenInvite);
+
+    // ---------- 初始化 ----------
+    document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; render(); });
     document.getElementById("logout").addEventListener("click", async () => {
-      try { await fetch("/logout", { method: "POST", credentials: "same-origin" }); } catch (e) {}
+      try { await api("/logout", { method: "POST" }); } catch (e) {}
       location.href = "/";
     });
     async function init() {
       try {
-        const r = await fetch("/data", { credentials: "same-origin" });
-        if (r.status !== 200) { location.href = "/"; return; }
-        window.PORTAL_DATA = await r.json();
-      } catch (e) { location.href = "/"; return; }
-      render("");
-      document.getElementById("search").focus();
+        state.me = await api("/me");
+        document.getElementById("userChip").textContent =
+          state.me.username + (state.me.role === "admin" ? " · 管理员" : "");
+        if (state.me.role === "admin") {
+          document.getElementById("invitePanel").hidden = false;
+          await loadInvites();
+        }
+        await refresh();
+        document.getElementById("search").focus();
+      } catch (e) {
+        location.href = "/";
+      }
     }
     init();
   </script>

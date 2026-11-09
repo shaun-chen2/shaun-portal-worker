@@ -11,6 +11,11 @@ AUTH_HASH = "1fcc8a52554dd357f19f4aab900df14e912dfea598f9831453445794d0ac48a8"
 # 会话签名密钥（机密）：本地放 .dev.vars，生产用 `wrangler secret put SESSION_SECRET`
 # SESSION_SECRET = "..."
 
+# 多账号 / 邀请码 / 每用户数据持久化
+kv_namespaces = [
+  { binding = "KV", id = "febb525299ce45818fedd871462c5d2d" }
+]
+
 # 自定义域名：Cloudflare 会自动建好解析记录（无需手动改 DNS）
 custom_domains = [
   { zone_name = "shuan.uk", zone_id = "5b655ec0987ee21f5995bd03efe07659", hostname = "shuan.uk" },

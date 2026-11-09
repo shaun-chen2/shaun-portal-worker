@@ -1,4 +1,4 @@
-export const DATA = {
+export const SEED_DATA = {
   "folders": [
     {
       "name": "Mozilla Firefox",

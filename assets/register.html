@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>注册 · 常用网页总览</title>
+  <style>/*STYLES*/</style>
+</head>
+<body>
+  <section class="login-wrap">
+    <form id="regForm" class="login-card" autocomplete="on">
+      <div class="logo">✚</div>
+      <h1>创建账号</h1>
+      <p class="sub">需要主账号生成的邀请码</p>
+      <input id="username" type="text" placeholder="用户名（2-32 字）" autocomplete="username" required />
+      <input id="password" type="password" placeholder="密码（至少 4 位）" autocomplete="new-password" required />
+      <input id="invite" type="text" placeholder="邀请码" required />
+      <button type="submit" id="regBtn">注 册</button>
+      <p id="regError" class="error" hidden></p>
+      <p class="alt"><a href="/">已有账号？去登录</a></p>
+    </form>
+  </section>
+  <script>
+    const errEl = document.getElementById("regError");
+    function showErr(msg) {
+      errEl.textContent = msg;
+      errEl.hidden = false;
+    }
+    document.getElementById("regForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const invite = document.getElementById("invite").value.trim();
+      const btn = document.getElementById("regBtn");
+      errEl.hidden = true;
+      btn.disabled = true;
+      btn.textContent = "注册中…";
+      try {
+        const r = await fetch("/register", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username, password, invite }),
+        });
+        if (r.ok) {
+          location.href = "/";
+          return;
+        }
+        const j = await r.json().catch(() => ({}));
+        const map = {
+          missing: "请填写全部字段",
+          username_length: "用户名长度需 2-32 字",
+          reserved: "该用户名已被保留",
+          password_short: "密码至少 4 位",
+          invite_invalid: "邀请码无效或已被使用",
+          username_taken: "用户名已被占用",
+        };
+        showErr(map[j.error] || "注册失败，请重试");
+      } catch (e) {
+        showErr("网络错误，请重试");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "注 册";
+      }
+    });
+  </script>
+</body>
+</html>
