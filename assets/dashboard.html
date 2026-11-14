@@ -20,22 +20,46 @@
       </div>
     </header>
 
+    <!-- 功能入口 -->
+    <section class="features">
+      <button class="feature" id="featImage">
+        <span class="feat-ico">🖼️</span>
+        <span class="feat-title">图片上传</span>
+        <span class="feat-sub">存到私人仓库，可选公开</span>
+      </button>
+      <button class="feature" id="featVideo">
+        <span class="feat-ico">🎞️</span>
+        <span class="feat-title">视频转 GIF</span>
+        <span class="feat-sub">浏览器端转换后上传</span>
+      </button>
+      <button class="feature" id="featAdmin" hidden>
+        <span class="feat-ico">🛠️</span>
+        <span class="feat-title">账号管理</span>
+        <span class="feat-sub">仅管理员可见</span>
+      </button>
+    </section>
+
     <div class="toolbar">
       <button id="addFolder" class="primary">＋ 添加文件夹</button>
     </div>
 
-    <section id="invitePanel" class="panel" hidden>
-      <div class="panel-head">
-        <h2>邀请码管理</h2>
-        <button id="genInvite" class="primary sm">＋ 生成邀请码</button>
-      </div>
-      <div id="inviteList" class="invite-list"></div>
+    <!-- 常用网站 -->
+    <div id="content" class="content"></div>
+
+    <!-- 资源图库 -->
+    <section class="gallery">
+      <h2 class="sec-title">我的资源</h2>
+      <div id="myGallery" class="grid gallery-grid"></div>
+      <p id="myEmpty" class="empty sm">还没有上传，点上方「图片上传」试试</p>
+
+      <h2 class="sec-title collapsible" id="publicToggle">公开内容 <span class="caret">▸</span> <span class="muted" id="pubHint">(点击展开)</span></h2>
+      <div id="publicGallery" class="grid gallery-grid" hidden></div>
     </section>
 
-    <div id="content" class="content"></div>
-    <footer class="foot">Cloudflare Workers · 数据按账号隔离存储</footer>
+    <footer class="foot">Cloudflare Workers · 数据按账号隔离 · 资源存于 GitHub 私人仓库</footer>
   </main>
 
+  <!-- 通用文本弹窗（文件夹/站点增改） -->
   <div id="modal" class="modal" hidden>
     <div class="modal-card">
       <h3 id="modalTitle"></h3>
@@ -47,8 +71,67 @@
     </div>
   </div>
 
+  <!-- 图片上传弹窗 -->
+  <div id="imgModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>图片上传</h3>
+      <form id="imgForm">
+        <div class="field"><span>选择图片</span><input id="imgFile" type="file" accept="image/*" required /></div>
+        <div class="field"><span>名称（可选）</span><input id="imgName" type="text" placeholder="默认取文件名" /></div>
+        <div class="field"><span>可见性</span>
+          <label class="radio"><input type="radio" name="imgVis" value="private" checked /> 私人（仅本人可见）</label>
+          <label class="radio"><input type="radio" name="imgVis" value="public" /> 公开（任何人凭链接可看，支持 Markdown 引用）</label>
+        </div>
+        <div id="imgMsg" class="error" hidden></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" data-close>取消</button>
+          <button type="submit" class="primary" id="imgSubmit">上传</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 视频转 GIF 弹窗 -->
+  <div id="videoModal" class="modal" hidden>
+    <div class="modal-card">
+      <h3>视频转 GIF</h3>
+      <form id="videoForm">
+        <div class="field"><span>选择视频</span><input id="videoFile" type="file" accept="video/*" required /></div>
+        <div class="field"><span>名称（可选）</span><input id="videoName" type="text" placeholder="默认取文件名" /></div>
+        <div class="field opts">
+          <span>参数</span>
+          <label>最大宽 <input id="gifMaxW" type="number" value="480" min="80" max="1280" /></label>
+          <label>帧率 <input id="gifFps" type="number" value="10" min="2" max="25" /></label>
+          <label>最长秒 <input id="gifDur" type="number" value="6" min="1" max="30" /></label>
+        </div>
+        <div class="field"><span>可见性</span>
+          <label class="radio"><input type="radio" name="videoVis" value="private" checked /> 私人（仅本人可见）</label>
+          <label class="radio"><input type="radio" name="videoVis" value="public" /> 公开（任何人凭链接可看，支持 Markdown 引用）</label>
+        </div>
+        <div id="gifBar" class="progress" hidden><div id="gifBarFill"></div><span id="gifBarText">0%</span></div>
+        <div id="videoMsg" class="error" hidden></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" data-close>取消</button>
+          <button type="submit" class="primary" id="gifSubmit">开始转换并上传</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 管理员：账号管理弹窗 -->
+  <div id="adminModal" class="modal" hidden>
+    <div class="modal-card wide">
+      <h3>账号管理</h3>
+      <div id="adminList" class="admin-list"></div>
+      <div class="modal-actions"><button class="ghost" data-close>关闭</button></div>
+    </div>
+  </div>
+
+  <!-- gifenc（视频转 GIF 编码库）由 /vendor/gifenc.js 同源提供，
+       在 convertVideoToGif 中按需动态 import 加载（不再用顶层静态 import）。 -->
+
   <script>
-    const state = { me: null, data: { folders: [] }, filter: "" };
+    const state = { me: null, data: { folders: [] }, filter: "", publicOpen: false };
 
     function escapeHtml(s) {
       return String(s == null ? "" : s)
@@ -113,7 +196,7 @@
         "</section>"
       );
     }
-    function render() {
+    function renderBookmarks() {
       const c = document.getElementById("content");
       if (!state.data.folders.length) {
         c.innerHTML = '<p class="empty">还没有文件夹，点上方「＋ 添加文件夹」开始</p>';
@@ -123,7 +206,7 @@
       c.innerHTML = html || '<p class="empty">没有匹配的结果</p>';
     }
 
-    // ---------- 弹窗 ----------
+    // ---------- 弹窗（通用文本）----------
     function openModal(title, fields, onSave, saveLabel) {
       const modal = document.getElementById("modal");
       document.getElementById("modalTitle").textContent = title;
@@ -155,8 +238,7 @@
       if (e.target.id === "modal") document.getElementById("modal").hidden = true;
     });
 
-    // ---------- 操作 ----------
-    async function refresh() { state.data = await api("/data"); render(); }
+    async function refresh() { state.data = await api("/data"); renderBookmarks(); }
 
     function onAddFolder() {
       openModal("添加文件夹", [{ name: "name", label: "文件夹名称", placeholder: "例如：工作" }],
@@ -212,6 +294,95 @@
       await refresh();
     }
 
+    // ---------- 图库 ----------
+    async function loadGallery() {
+      const { items } = await api("/gallery");
+      const mine = items.filter((x) => x.owner === state.me.username);
+      // 「公开内容」只放别人的公开资源；自己的公开图已在「我的资源」里，避免重复展示
+      const pub = items.filter((x) => x.visibility === "public" && x.owner !== state.me.username);
+      const myEl = document.getElementById("myGallery");
+      const pubEl = document.getElementById("publicGallery");
+      myEl.innerHTML = mine.map(galleryCard).join("") || "";
+      document.getElementById("myEmpty").hidden = mine.length > 0;
+      document.getElementById("publicToggle").hidden = pub.length === 0;
+      pubEl.innerHTML = pub.map(galleryCard).join("") || "";
+      if (state.publicOpen) pubEl.hidden = false;
+    }
+    // 由资源名推导下载文件名（与服务端 assetFileName 保持一致的规则）
+    function safeFileName(it) {
+      const base = String(it.name || "资源")
+        .replace(/[\\/:*?"<>|\r\n\t]/g, "_")
+        .trim()
+        .slice(0, 60) || "资源";
+      const ext = String(it.ext || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+      if (ext && !base.toLowerCase().endsWith("." + ext)) return base + "." + ext;
+      return base;
+    }
+    // 复制文本：优先 Clipboard API，降级到隐藏 textarea + execCommand
+    async function copyText(text) {
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (e) { /* 降级 */ }
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.cssText = "position:fixed;top:-1000px;left:-1000px;opacity:0";
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) { return false; }
+    }
+    // 轻量提示条
+    let toastTimer = null;
+    function toast(msg) {
+      let el = document.getElementById("toast");
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "toast";
+        el.className = "toast";
+        document.body.appendChild(el);
+      }
+      el.textContent = msg;
+      void el.offsetWidth; // 重置过渡，连续点击也能重新淡入
+      el.classList.add("on");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove("on"), 2200);
+    }
+    // 资源直链：带扩展名更像图片地址，Markdown / 论坛里更好识别
+    function assetLink(it) {
+      return location.origin + "/assets/" + it.id + (it.ext ? "." + it.ext : "");
+    }
+    function galleryCard(it) {
+      const isMine = it.owner === state.me.username;
+      const url = "/assets/" + it.id;
+      return (
+        '<div class="g-card">' +
+        '<img src="' + url + '" alt="' + escapeHtml(it.name) + '" loading="lazy" ' +
+        'onerror="this.parentNode.classList.add(\'broken\')" />' +
+        '<div class="g-meta"><span class="g-name" title="' + escapeHtml(it.name) + '">' + escapeHtml(it.name) + "</span>" +
+        '<span class="badge ' + (it.visibility === "public" ? "pub" : "pri") + '">' + (it.visibility === "public" ? "公开" : "私人") + "</span></div>" +
+        (isMine
+          ? '<div class="g-actions">' +
+            '<a class="g-act" href="' + url + '?dl=1" download="' + escapeHtml(safeFileName(it)) + '" title="下载原文件">下载</a>' +
+            '<button class="g-act" type="button" data-copy="' + it.id + '" data-vis="' + it.visibility + '" data-ext="' + escapeHtml(it.ext || "") + '" title="复制直链（知道链接即可打开）">链接</button>' +
+            (it.visibility === "public"
+              ? '<button class="g-act" type="button" data-copymd="' + it.id + '" data-ext="' + escapeHtml(it.ext || "") + '" title="复制 Markdown 图片语法：![](链接)">MD</button>'
+              : "") +
+            "</div>"
+          : "") +
+        (isMine || state.me.role === "admin"
+          ? '<button class="icon danger g-del" data-del="' + it.id + '" title="删除">✕</button>'
+          : "") +
+        "</div>"
+      );
+    }
     document.getElementById("content").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-act]");
       if (!btn) return;
@@ -224,30 +395,286 @@
       else if (act === "del-site") onDelSite(sid);
     });
     document.getElementById("addFolder").addEventListener("click", onAddFolder);
-
-    // ---------- 邀请码（管理员） ----------
-    async function loadInvites() {
-      const r = await api("/invite");
-      const box = document.getElementById("inviteList");
-      if (!r.invites.length) { box.innerHTML = '<p class="empty sm">还没有邀请码，点「生成邀请码」创建一个</p>'; return; }
-      box.innerHTML = r.invites.map((inv) => {
-        const used = inv.usedBy ? '<span class="tag used">已使用 · ' + escapeHtml(inv.usedBy) + "</span>"
-          : '<span class="tag ok">未使用</span>';
-        return '<div class="invite-row"><code>' + escapeHtml(inv.code) + "</code>" + used + "</div>";
-      }).join("");
-    }
-    async function onGenInvite() {
-      const r = await api("/invite", { method: "POST" });
-      await loadInvites();
-      if (r.code) {
-        const copy = confirm("邀请码已生成：" + r.code + "\n\n点「确定」复制，把邀请码发给对方即可注册。");
-        if (copy) { try { await navigator.clipboard.writeText(r.code); } catch (e) {} }
+    // 图库：复制链接 / 复制 Markdown / 删除
+    document.querySelector(".gallery").addEventListener("click", async (e) => {
+      const copy = e.target.closest("button[data-copy]");
+      if (copy) {
+        const link = assetLink({ id: copy.dataset.copy, ext: copy.dataset.ext });
+        const ok = await copyText(link);
+        if (!ok) {
+          alert("复制失败，请手动复制下面的链接：\n" + link);
+          return;
+        }
+        toast(copy.dataset.vis === "public"
+          ? "链接已复制，未登录的人也能直接打开"
+          : "链接已复制（私人资源仅你本人登录后可打开）");
+        return;
       }
+      const copyMd = e.target.closest("button[data-copymd]");
+      if (copyMd) {
+        const link = assetLink({ id: copyMd.dataset.copymd, ext: copyMd.dataset.ext });
+        const md = "![](" + link + ")";
+        const ok = await copyText(md);
+        if (!ok) {
+          alert("复制失败，请手动复制下面的内容：\n" + md);
+          return;
+        }
+        toast("Markdown 已复制，粘到文档里就能显示图片");
+        return;
+      }
+      const del = e.target.closest("button[data-del]");
+      if (!del) return;
+      if (!confirm("删除该资源？")) return;
+      try {
+        await api("/assets/" + del.dataset.del, { method: "DELETE" });
+        await loadGallery();
+      } catch (err) { alert(err.message || "删除失败"); }
+    });
+    // 公开内容折叠
+    document.getElementById("publicToggle").addEventListener("click", () => {
+      state.publicOpen = !state.publicOpen;
+      document.getElementById("publicGallery").hidden = !state.publicOpen;
+      document.querySelector("#publicToggle .caret").textContent = state.publicOpen ? "▾" : "▸";
+      document.getElementById("pubHint").textContent = state.publicOpen ? "(点击收起)" : "(点击展开)";
+    });
+
+    // ---------- 图片上传 ----------
+    function show(el) { el.hidden = false; }
+    function hide(el) { el.hidden = true; }
+    document.getElementById("featImage").addEventListener("click", () => {
+      document.getElementById("imgForm").reset();
+      hide(document.getElementById("imgMsg"));
+      show(document.getElementById("imgModal"));
+    });
+    document.getElementById("imgModal").addEventListener("click", (e) => {
+      if (e.target.id === "imgModal") hide(document.getElementById("imgModal"));
+      if (e.target.dataset.close !== undefined) hide(document.getElementById("imgModal"));
+    });
+    document.getElementById("imgForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("imgFile").files[0];
+      const msg = document.getElementById("imgMsg");
+      hide(msg);
+      if (!file) return;
+      const vis = document.querySelector('input[name="imgVis"]:checked').value;
+      try {
+        const b64 = await readFileAsDataURL(file);
+        const comma = b64.indexOf(",");
+        const data = b64.slice(comma + 1);
+        const ext = (file.name.split(".").pop() || "png").toLowerCase().slice(0, 6);
+        await api("/upload", {
+          method: "POST",
+          body: JSON.stringify({
+            name: document.getElementById("imgName").value.trim() || file.name,
+            visibility: vis, data, type: file.type || "image/png", ext,
+          }),
+        });
+        hide(document.getElementById("imgModal"));
+        await loadGallery();
+      } catch (err) {
+        msg.textContent = err.message || "上传失败";
+        show(msg);
+      }
+    });
+
+    // ---------- 视频转 GIF ----------
+    document.getElementById("featVideo").addEventListener("click", () => {
+      document.getElementById("videoForm").reset();
+      hide(document.getElementById("videoMsg"));
+      hide(document.getElementById("gifBar"));
+      show(document.getElementById("videoModal"));
+    });
+    document.getElementById("videoModal").addEventListener("click", (e) => {
+      if (e.target.id === "videoModal") hide(document.getElementById("videoModal"));
+      if (e.target.dataset.close !== undefined) hide(document.getElementById("videoModal"));
+    });
+    document.getElementById("videoForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("videoFile").files[0];
+      const msg = document.getElementById("videoMsg");
+      hide(msg);
+      if (!file) return;
+      const vis = document.querySelector('input[name="videoVis"]:checked').value;
+      const maxW = Math.max(80, Math.min(1280, +document.getElementById("gifMaxW").value || 480));
+      const fps = Math.max(2, Math.min(25, +document.getElementById("gifFps").value || 10));
+      const maxSec = Math.max(1, Math.min(30, +document.getElementById("gifDur").value || 6));
+      const btn = document.getElementById("gifSubmit");
+      btn.disabled = true;
+      try {
+        const gifBlob = await convertVideoToGif(file, { maxW, fps, maxSec, onProgress: setGifProgress });
+        const b64 = await blobToDataURL(gifBlob);
+        const data = b64.slice(b64.indexOf(",") + 1);
+        await api("/upload", {
+          method: "POST",
+          body: JSON.stringify({
+            name: document.getElementById("videoName").value.trim() || file.name,
+            visibility: vis, data, type: "image/gif", ext: "gif",
+          }),
+        });
+        hide(document.getElementById("videoModal"));
+        await loadGallery();
+      } catch (err) {
+        msg.textContent = err.message || "转换失败";
+        show(msg);
+      } finally {
+        btn.disabled = false;
+        hide(document.getElementById("gifBar"));
+      }
+    });
+    function setGifProgress(p) {
+      const bar = document.getElementById("gifBar");
+      show(bar);
+      document.getElementById("gifBarFill").style.width = Math.round(p * 100) + "%";
+      document.getElementById("gifBarText").textContent = Math.round(p * 100) + "%";
     }
-    document.getElementById("genInvite").addEventListener("click", onGenInvite);
+    // 加载 gifenc：优先同源 /vendor/gifenc.js，失败再回退公共 ESM CDN。
+    // 关键：绝不能用 dist/gifenc.min.js —— 那是 CJS 构建（含 exports.xxx）被压缩后的产物，
+    // 在浏览器 import() 里会抛 ReferenceError: exports is not defined。
+    let gifencPromise = null;
+    function loadGifenc() {
+      if (!gifencPromise) {
+        const sources = [
+          "/vendor/gifenc.js",
+          "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/dist/gifenc.esm.js",
+          "https://esm.sh/gifenc@1.0.3",
+        ];
+        gifencPromise = (async () => {
+          for (const src of sources) {
+            try {
+              const mod = await import(src);
+              if (mod && mod.GIFEncoder && mod.quantize && mod.applyPalette) return mod;
+            } catch (e) {
+              // 该源不可用，继续尝试下一个
+            }
+          }
+          gifencPromise = null; // 允许下次重试
+          throw new Error("GIF 编码库加载失败，请检查网络后重试");
+        })();
+      }
+      return gifencPromise;
+    }
+    async function convertVideoToGif(file, opts) {
+      const gifenc = await loadGifenc();
+      const { GIFEncoder, quantize, applyPalette } = gifenc;
+      const video = document.createElement("video");
+      video.muted = true; video.src = URL.createObjectURL(file);
+      await new Promise((res, rej) => {
+        video.onloadedmetadata = () => res();
+        video.onerror = () => rej(new Error("无法解码该视频，请换用 MP4（H.264）后重试"));
+      });
+      if (!video.videoWidth || !video.videoHeight) {
+        throw new Error("无法读取视频画面尺寸，请换用 MP4（H.264）后重试");
+      }
+      const duration = Math.min(video.duration || opts.maxSec, opts.maxSec);
+      const scale = Math.min(1, opts.maxW / video.videoWidth);
+      const w = Math.max(1, Math.round(video.videoWidth * scale));
+      const h = Math.max(1, Math.round(video.videoHeight * scale));
+      const total = Math.max(1, Math.floor(duration * opts.fps));
+      const step = 1 / opts.fps;
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      const gif = GIFEncoder();
+      const delay = Math.round(1000 / opts.fps);
+      for (let i = 0; i < total; i++) {
+        const t = Math.min(duration - 0.001, i * step);
+        await seekTo(video, t);
+        ctx.drawImage(video, 0, 0, w, h);
+        const img = ctx.getImageData(0, 0, w, h);
+        const palette = quantize(img.data, 256);
+        const index = applyPalette(img.data, palette);
+        gif.writeFrame(index, w, h, { palette, delay });
+        if (opts.onProgress) opts.onProgress((i + 1) / total);
+      }
+      gif.finish();
+      URL.revokeObjectURL(video.src);
+      return new Blob([gif.bytes()], { type: "image/gif" });
+    }
+    function seekTo(video, t) {
+      return new Promise((res) => {
+        let done = false;
+        const finish = () => { if (done) return; done = true; clearTimeout(timer); res(); };
+        // 某些编码的视频 seek 不触发 seeked，3 秒兜底，避免整个转换卡死
+        const timer = setTimeout(finish, 3000);
+        video.onseeked = finish;
+        video.currentTime = t;
+      });
+    }
+    function readFileAsDataURL(file) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+    }
+    function blobToDataURL(blob) {
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(blob);
+      });
+    }
+
+    // ---------- 管理员：账号管理 ----------
+    document.getElementById("featAdmin").addEventListener("click", async () => {
+      show(document.getElementById("adminModal"));
+      await loadAccounts();
+    });
+    document.getElementById("adminModal").addEventListener("click", (e) => {
+      if (e.target.id === "adminModal") hide(document.getElementById("adminModal"));
+      if (e.target.dataset.close !== undefined) hide(document.getElementById("adminModal"));
+    });
+    async function loadAccounts() {
+      const box = document.getElementById("adminList");
+      try {
+        const { accounts } = await api("/admin/accounts");
+        if (!accounts.length) { box.innerHTML = '<p class="empty sm">暂无其他账号</p>'; return; }
+        box.innerHTML = accounts.map((a) => {
+          const isMe = a.username === state.me.username;
+          return (
+            '<div class="admin-row">' +
+            '<div class="a-info"><span class="a-name">' + escapeHtml(a.username) + "</span>" +
+            '<span class="badge ' + (a.role === "admin" ? "pub" : "pri") + '">' + (a.role === "admin" ? "管理员" : "用户") + "</span></div>" +
+            '<div class="a-acts">' +
+            '<button class="ghost sm" data-reset="' + escapeHtml(a.username) + '">重置密码</button>' +
+            (a.role === "admin"
+              ? '<button class="ghost sm" data-role="' + escapeHtml(a.username) + '" data-to="user">取消管理员</button>'
+              : '<button class="ghost sm" data-role="' + escapeHtml(a.username) + '" data-to="admin">设为管理员</button>') +
+            (isMe ? "" : '<button class="icon danger" data-delacc="' + escapeHtml(a.username) + '" title="删除">✕</button>') +
+            "</div></div>"
+          );
+        }).join("");
+      } catch (e) { box.innerHTML = '<p class="error">' + escapeHtml(e.message) + "</p>"; }
+    }
+    document.getElementById("adminList").addEventListener("click", async (e) => {
+      const reset = e.target.closest("button[data-reset]");
+      const role = e.target.closest("button[data-role]");
+      const del = e.target.closest("button[data-delacc]");
+      try {
+        if (reset) {
+          const pw = prompt("为 " + reset.dataset.reset + " 设置新密码（至少 4 位）：");
+          if (!pw) return;
+          await api("/admin/accounts/" + encodeURIComponent(reset.dataset.reset) + "/reset", {
+            method: "POST", body: JSON.stringify({ password: pw }),
+          });
+          alert("密码已重置");
+        } else if (role) {
+          await api("/admin/accounts/" + encodeURIComponent(role.dataset.role) + "/role", {
+            method: "POST", body: JSON.stringify({ role: role.dataset.to }),
+          });
+          await loadAccounts();
+        } else if (del) {
+          if (!confirm("删除账号 " + del.dataset.delacc + "？其书签与资源也会一并清除。")) return;
+          await api("/admin/accounts/" + encodeURIComponent(del.dataset.delacc), { method: "DELETE" });
+          await loadAccounts();
+        }
+      } catch (err) { alert(err.message || "操作失败"); }
+    });
 
     // ---------- 初始化 ----------
-    document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; render(); });
+    document.getElementById("search").addEventListener("input", (e) => { state.filter = e.target.value; renderBookmarks(); });
     document.getElementById("logout").addEventListener("click", async () => {
       try { await api("/logout", { method: "POST" }); } catch (e) {}
       location.href = "/";
@@ -257,11 +684,9 @@
         state.me = await api("/me");
         document.getElementById("userChip").textContent =
           state.me.username + (state.me.role === "admin" ? " · 管理员" : "");
-        if (state.me.role === "admin") {
-          document.getElementById("invitePanel").hidden = false;
-          await loadInvites();
-        }
+        if (state.me.role === "admin") document.getElementById("featAdmin").hidden = false;
         await refresh();
+        await loadGallery();
         document.getElementById("search").focus();
       } catch (e) {
         location.href = "/";

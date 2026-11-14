@@ -11,10 +11,9 @@
     <form id="regForm" class="login-card" autocomplete="on">
       <div class="logo">✚</div>
       <h1>创建账号</h1>
-      <p class="sub">需要主账号生成的邀请码</p>
+      <p class="sub">开放注册，填用户名和密码即可</p>
       <input id="username" type="text" placeholder="用户名（2-32 字）" autocomplete="username" required />
       <input id="password" type="password" placeholder="密码（至少 4 位）" autocomplete="new-password" required />
-      <input id="invite" type="text" placeholder="邀请码" required />
       <button type="submit" id="regBtn">注 册</button>
       <p id="regError" class="error" hidden></p>
       <p class="alt"><a href="/">已有账号？去登录</a></p>
@@ -30,7 +29,6 @@
       e.preventDefault();
       const username = document.getElementById("username").value.trim();
       const password = document.getElementById("password").value;
-      const invite = document.getElementById("invite").value.trim();
       const btn = document.getElementById("regBtn");
       errEl.hidden = true;
       btn.disabled = true;
@@ -39,7 +37,7 @@
         const r = await fetch("/register", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username, password, invite }),
+          body: JSON.stringify({ username, password }),
         });
         if (r.ok) {
           location.href = "/";
@@ -51,7 +49,6 @@
           username_length: "用户名长度需 2-32 字",
           reserved: "该用户名已被保留",
           password_short: "密码至少 4 位",
-          invite_invalid: "邀请码无效或已被使用",
           username_taken: "用户名已被占用",
         };
         showErr(map[j.error] || "注册失败，请重试");

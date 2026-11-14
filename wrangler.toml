@@ -7,17 +7,19 @@ account_id = "80aca1f1efb175ea21fbf99eda06b786"
 [vars]
 AUTH_USERNAME = "陈帅帅"
 AUTH_HASH = "1fcc8a52554dd357f19f4aab900df14e912dfea598f9831453445794d0ac48a8"
+GH_OWNER = "shaun-chen2"
+GH_REPO = "shaun-portal-assets"
 
-# 会话签名密钥（机密）：本地放 .dev.vars，生产用 `wrangler secret put SESSION_SECRET`
+# 会话签名密钥（机密）：用 `wrangler secret put SESSION_SECRET` 注入，不要写进 wrangler.toml
 # SESSION_SECRET = "..."
 
-# 多账号 / 邀请码 / 每用户数据持久化
-kv_namespaces = [
-  { binding = "KV", id = "febb525299ce45818fedd871462c5d2d" }
-]
+# 多账号 / 邀请码 / 每用户数据持久化（顶层绑定，运行时即 env.KV）
+[[kv_namespaces]]
+binding = "KV"
+id = "febb525299ce45818fedd871462c5d2d"
 
-# 自定义域名：Cloudflare 会自动建好解析记录（无需手动改 DNS）
-custom_domains = [
-  { zone_name = "shuan.uk", zone_id = "5b655ec0987ee21f5995bd03efe07659", hostname = "shuan.uk" },
-  { zone_name = "shuan.uk", zone_id = "5b655ec0987ee21f5995bd03efe07659", hostname = "www.shuan.uk" },
-]
+# 自定义域名：web.shuan.uk（Cloudflare 会自动建好解析记录并签发证书）
+[[routes]]
+pattern = "web.shuan.uk"
+custom_domain = true
+zone_id = "5b655ec0987ee21f5995bd03efe07659"

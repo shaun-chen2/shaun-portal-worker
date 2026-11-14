@@ -10,6 +10,11 @@ const loginHtml = readFileSync(BASE + "/assets/login.html", "utf8").replace("/*S
 const regHtml = readFileSync(BASE + "/assets/register.html", "utf8").replace("/*STYLES*/", styles);
 const dashHtml = readFileSync(BASE + "/assets/dashboard.html", "utf8").replace("/*STYLES*/", styles);
 
+// gifenc（视频转 GIF 编码库）官方 ESM 构建，同源托管为 /vendor/gifenc.js
+// 注意：必须用 dist/gifenc.esm.js，dist/gifenc.js 是 CJS（含 exports.xxx），
+// 在浏览器里用 import() 加载会抛 "exports is not defined"。
+const gifencJs = readFileSync(BASE + "/assets/vendor/gifenc.esm.js", "utf8");
+
 // 从已有的 Firefox 数据文件提取 JSON 对象（仅作为主账号的初始化种子）
 const oldDataPath = "/Users/chenhehe/WorkBuddy/2026-11-08-10-10-56/shaun-portal/data.js";
 const oldData = readFileSync(oldDataPath, "utf8");
@@ -25,7 +30,8 @@ writeFileSync(
   BASE + "/src/ui.js",
   "export const LOGIN_HTML = " + JSON.stringify(loginHtml) + ";\n" +
   "export const REG_HTML = " + JSON.stringify(regHtml) + ";\n" +
-  "export const DASH_HTML = " + JSON.stringify(dashHtml) + ";\n"
+  "export const DASH_HTML = " + JSON.stringify(dashHtml) + ";\n" +
+  "export const GIFENC_JS = " + JSON.stringify(gifencJs) + ";\n"
 );
 writeFileSync(BASE + "/src/data.js", "export const SEED_DATA = " + seedJson + ";\n");
 
