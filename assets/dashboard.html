@@ -228,7 +228,7 @@
         const vals = {};
         for (const f of fields) vals[f.name] = document.getElementById("mf_" + f.name).value.trim();
         try { await onSave(vals); modal.hidden = true; }
-        catch (e) { alert(e.message || "操作失败"); }
+        catch (e) { await dlgAlert("操作失败", e.message || "请重试"); }
       };
       document.getElementById("modalCancel").onclick = () => { modal.hidden = true; };
       const first = body.querySelector("input,select");
@@ -253,7 +253,12 @@
     async function onDelFolder(id) {
       const f = state.data.folders.find((x) => x.id === id);
       if (!f) return;
-      if (!confirm("删除文件夹「" + f.name + "」及其下 " + f.sites.length + " 个站点？")) return;
+      const okDel = await dlgConfirm(
+        "删除文件夹",
+        "「" + f.name + "」及其下 " + f.sites.length + " 个站点都会被删除，操作不可撤销。",
+        { danger: true, okText: "删除" }
+      );
+      if (!okDel) return;
       await api("/folders/" + id, { method: "DELETE" });
       await refresh();
     }
@@ -289,7 +294,7 @@
       });
     }
     async function onDelSite(siteId) {
-      if (!confirm("删除该站点？")) return;
+      if (!(await dlgConfirm("删除站点", "该站点会从当前文件夹移除。", { danger: true, okText: "删除" }))) return;
       await api("/sites/" + siteId, { method: "DELETE" });
       await refresh();
     }
@@ -355,6 +360,71 @@
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => el.classList.remove("on"), 2200);
     }
+    // ---------- 页内弹窗：替代 confirm / alert / prompt ----------
+    // 浏览器勾选「阻止所有弹窗」后，原生 confirm() 会静默返回 false、prompt() 返回 null，
+    // 表现为「点了没反应、删不掉」。改成自己画的弹窗，不再受浏览器设置影响。
+    let dlgResolve = null;
+    function dlgEnsure() {
+      let el = document.getElementById("dlg");
+      if (el) return el;
+      el = document.createElement("div");
+      el.id = "dlg";
+      el.className = "modal";
+      el.hidden = true;
+      el.innerHTML =
+        '<div class="modal-card dlg-card" role="dialog" aria-modal="true">' +
+        '<h3 id="dlgTitle"></h3>' +
+        '<p id="dlgMsg" class="dlg-msg"></p>' +
+        '<input id="dlgInput" class="dlg-input" type="text" hidden />' +
+        '<div class="modal-actions">' +
+        '<button type="button" class="ghost" id="dlgCancel">取消</button>' +
+        '<button type="button" class="primary" id="dlgOk">确定</button>' +
+        "</div></div>";
+      document.body.appendChild(el);
+      el.addEventListener("click", (e) => { if (e.target === el) dlgClose(el.dataset.mode === "alert"); });
+      el.querySelector("#dlgCancel").addEventListener("click", () => dlgClose(false));
+      el.querySelector("#dlgOk").addEventListener("click", () => dlgClose(true));
+      el.querySelector("#dlgInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); dlgClose(true); }
+      });
+      document.addEventListener("keydown", (e) => {
+        if (el.hidden) return;
+        if (e.key === "Escape") { e.preventDefault(); dlgClose(el.dataset.mode === "alert"); }
+        else if (e.key === "Enter" && el.dataset.mode !== "prompt") { e.preventDefault(); dlgClose(true); }
+      });
+      return el;
+    }
+    function dlgClose(ok) {
+      const el = document.getElementById("dlg");
+      if (!el || el.hidden) return;
+      const mode = el.dataset.mode;
+      const val = el.querySelector("#dlgInput").value;
+      el.hidden = true;
+      const res = dlgResolve;
+      dlgResolve = null;
+      if (res) res(mode === "prompt" ? (ok ? val : null) : ok);
+    }
+    function dlgOpen(mode, title, msg, opts) {
+      opts = opts || {};
+      const el = dlgEnsure();
+      el.dataset.mode = mode;
+      el.querySelector("#dlgTitle").textContent = title || "提示";
+      el.querySelector("#dlgMsg").textContent = msg || "";
+      const input = el.querySelector("#dlgInput");
+      input.hidden = mode !== "prompt";
+      input.value = opts.value || "";
+      el.querySelector("#dlgCancel").hidden = mode === "alert";
+      const okBtn = el.querySelector("#dlgOk");
+      okBtn.textContent = opts.okText || (mode === "alert" ? "知道了" : "确定");
+      okBtn.className = "primary" + (opts.danger ? " danger-solid" : "");
+      el.hidden = false;
+      setTimeout(() => (mode === "prompt" ? input : okBtn).focus(), 30);
+      return new Promise((res) => { dlgResolve = res; });
+    }
+    const dlgConfirm = (title, msg, opts) => dlgOpen("confirm", title, msg, opts);
+    const dlgAlert = (title, msg) => dlgOpen("alert", title, msg);
+    const dlgPrompt = (title, msg, value) => dlgOpen("prompt", title, msg, { value });
+
     // 资源直链：带扩展名更像图片地址，Markdown / 论坛里更好识别
     function assetLink(it) {
       return location.origin + "/assets/" + it.id + (it.ext ? "." + it.ext : "");
@@ -402,7 +472,7 @@
         const link = assetLink({ id: copy.dataset.copy, ext: copy.dataset.ext });
         const ok = await copyText(link);
         if (!ok) {
-          alert("复制失败，请手动复制下面的链接：\n" + link);
+          await dlgAlert("复制失败", "请手动复制下面的链接：" + link);
           return;
         }
         toast(copy.dataset.vis === "public"
@@ -416,7 +486,7 @@
         const md = "![](" + link + ")";
         const ok = await copyText(md);
         if (!ok) {
-          alert("复制失败，请手动复制下面的内容：\n" + md);
+          await dlgAlert("复制失败", "请手动复制下面的内容：" + md);
           return;
         }
         toast("Markdown 已复制，粘到文档里就能显示图片");
@@ -424,11 +494,11 @@
       }
       const del = e.target.closest("button[data-del]");
       if (!del) return;
-      if (!confirm("删除该资源？")) return;
+      if (!(await dlgConfirm("删除资源", "文件会从存储中删除，已分享出去的链接随即失效。", { danger: true, okText: "删除" }))) return;
       try {
         await api("/assets/" + del.dataset.del, { method: "DELETE" });
         await loadGallery();
-      } catch (err) { alert(err.message || "删除失败"); }
+      } catch (err) { await dlgAlert("删除失败", err.message || "请重试"); }
     });
     // 公开内容折叠
     document.getElementById("publicToggle").addEventListener("click", () => {
@@ -654,23 +724,28 @@
       const del = e.target.closest("button[data-delacc]");
       try {
         if (reset) {
-          const pw = prompt("为 " + reset.dataset.reset + " 设置新密码（至少 4 位）：");
+          const pw = await dlgPrompt("重置密码", "为「" + reset.dataset.reset + "」设置新密码（至少 4 位）：");
           if (!pw) return;
           await api("/admin/accounts/" + encodeURIComponent(reset.dataset.reset) + "/reset", {
             method: "POST", body: JSON.stringify({ password: pw }),
           });
-          alert("密码已重置");
+          toast("密码已重置");
         } else if (role) {
           await api("/admin/accounts/" + encodeURIComponent(role.dataset.role) + "/role", {
             method: "POST", body: JSON.stringify({ role: role.dataset.to }),
           });
           await loadAccounts();
         } else if (del) {
-          if (!confirm("删除账号 " + del.dataset.delacc + "？其书签与资源也会一并清除。")) return;
-          await api("/admin/accounts/" + encodeURIComponent(del.dataset.delacc), { method: "DELETE" });
+          const okAcc = await dlgConfirm(
+            "删除账号",
+            "「" + del.dataset.delacc + "」的书签与全部资源都会被清除，操作不可撤销。",
+            { danger: true, okText: "删除" }
+          );
+          if (!okAcc) return;
+          await api("/admin/accounts/delete", { method: "POST", body: JSON.stringify({ username: del.dataset.delacc }) });
           await loadAccounts();
         }
-      } catch (err) { alert(err.message || "操作失败"); }
+      } catch (err) { await dlgAlert("操作失败", err.message || "请重试"); }
     });
 
     // ---------- 初始化 ----------

@@ -10,6 +10,8 @@ AUTH_HASH = "1fcc8a52554dd357f19f4aab900df14e912dfea598f9831453445794d0ac48a8"
 GH_OWNER = "shaun-chen2"
 GH_REPO = "shaun-portal-assets"
 
+# 人机验证（Cloudflare Turnstile）：sitekey 0x4AAAAAAGKGOxeqwkHK26vS 已内联在 login/register 页面，
+# 校验密钥用 `wrangler secret put TURNSTILE_SECRET` 注入；未配置时跳过校验（仅用于应急回退）
 # 会话签名密钥（机密）：用 `wrangler secret put SESSION_SECRET` 注入，不要写进 wrangler.toml
 # SESSION_SECRET = "..."
 

@@ -56,8 +56,10 @@ function cookieFrom(res) {
   const m = sc.match(/sid=([^;]+)/);
   return m ? m[1] : null;
 }
-async function call(method, path, body, cookie) {
-  const headers = {};
+const BROWSER_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+async function call(method, path, body, cookie, extra) {
+  const headers = { "user-agent": BROWSER_UA };
+  if (extra) Object.assign(headers, extra);
   if (cookie) headers["Cookie"] = "sid=" + cookie;
   const opts = { method, headers };
   if (body !== undefined) { headers["content-type"] = "application/json"; opts.body = JSON.stringify(body); }
@@ -67,8 +69,9 @@ async function call(method, path, body, cookie) {
   return { status: r.status, headers: r.headers, data, cookie: cookieFrom(r) };
 }
 // 取原始响应（校验字节与响应头用）
-async function raw(method, path, cookie) {
-  const headers = {};
+async function raw(method, path, cookie, extra) {
+  const headers = { "user-agent": BROWSER_UA };
+  if (extra) Object.assign(headers, extra);
   if (cookie) headers["Cookie"] = "sid=" + cookie;
   const r = await worker.fetch(new Request("https://x" + path, { method, headers }), env);
   const buf = new Uint8Array(await r.arrayBuffer());
@@ -149,6 +152,66 @@ ok("?dl=1 带 attachment", cd.startsWith("attachment;"));
 ok("中文文件名走 RFC 5987", cd.includes("filename*=UTF-8''") && cd.includes("%E7%A7%81"));
 const inline = await raw("GET", "/assets/" + PRIV, reg.cookie);
 ok("不带参数无 Content-Disposition（图片可内联）", inline.headers.get("content-disposition") === null);
+
+console.log("== 8. 人机验证（Turnstile）==");
+// 打开校验开关，并把 siteverify 打桩：token 为 "good" 才算通过
+env.TURNSTILE_SECRET = "test-turnstile-secret";
+const beforeTs = globalThis.fetch;
+globalThis.fetch = async (url, opts) => {
+  if (String(url).includes("/turnstile/v0/siteverify")) {
+    const form = new URLSearchParams(String((opts && opts.body) || ""));
+    const okTok = form.get("response") === "good" && form.get("secret") === "test-turnstile-secret";
+    return new Response(JSON.stringify({ success: okTok }), { status: 200, headers: { "content-type": "application/json" } });
+  }
+  return beforeTs(url, opts);
+};
+const noTok = await call("POST", "/login", { username: "陈帅帅", password: ADMIN_PASS });
+ok("登录缺 token -> 403 captcha", noTok.status === 403 && noTok.data && noTok.data.error === "captcha", JSON.stringify(noTok.data));
+const badTok = await call("POST", "/login", { username: "陈帅帅", password: ADMIN_PASS, cfToken: "bad" });
+ok("登录错误 token -> 403 captcha", badTok.status === 403 && badTok.data.error === "captcha");
+const goodTok = await call("POST", "/login", { username: "陈帅帅", password: ADMIN_PASS, cfToken: "good" });
+ok("登录有效 token -> 200 + 会话", goodTok.status === 200 && !!goodTok.cookie);
+const regNoTok = await call("POST", "/register", { username: "carol", password: "pw1234" });
+ok("注册缺 token -> 403 captcha", regNoTok.status === 403 && regNoTok.data.error === "captcha");
+const regOkTok = await call("POST", "/register", { username: "carol", password: "pw1234", cfToken: "good" });
+ok("注册有效 token -> 200", regOkTok.status === 200);
+globalThis.fetch = beforeTs;
+
+console.log("== 9. 边缘防护：扫描器路径 / 可疑 UA / 限流 ==");
+// 扫描器爱探的路径：一律 404，且不进入业务逻辑
+for (const path of ["/api/user/ismustmobile", "/h5/", "/shouye.html", "/.env",
+                    "/.aws/credentials.bak", "/wp-login.php", "/static/js/common.js"]) {
+  const r = await call("GET", path);
+  ok("扫描路径 404 " + path, r.status === 404, r.status);
+}
+// 真实路由不受影响
+ok("首页 200", (await call("GET", "/")).status === 200);
+ok("favicon 204", (await call("GET", "/favicon.ico")).status === 204);
+ok("gifenc 200", (await call("GET", "/vendor/gifenc.js")).status === 200);
+// 图片资源不受 UA 检查影响：空 UA 也进到业务层（此处 ID 不存在，应得到 404 而非 403）
+const noUaAsset = await raw("GET", "/assets/99999999-9999-4999-8999-999999999999", null, { "user-agent": "" });
+ok("空 UA 取资源 -> 放行到业务层（404）", noUaAsset.status === 404, noUaAsset.status);
+
+// UA 识别：脚本/扫描器 UA 挡在 403；图片资源例外
+const scanUa = await call("GET", "/", undefined, null, { "user-agent": "python-requests/2.31.0" });
+ok("python-requests 访问页面 -> 403", scanUa.status === 403, scanUa.status);
+const noUa = await call("GET", "/", undefined, null, { "user-agent": "" });
+ok("空 UA 访问页面 -> 403", noUa.status === 403, noUa.status);
+
+// 限流：同一 IP 连打 /login 超过 10 次/分 -> 429
+const IP = "203.0.113.77";
+let firstLimited = 0, limitedResp = null;
+for (let i = 1; i <= 12; i++) {
+  const r = await call("POST", "/login", { username: "陈帅帅", password: "wrongpw" }, null, { "cf-connecting-ip": IP });
+  if (r.status === 429 && !firstLimited) { firstLimited = i; limitedResp = r; }
+}
+ok("第 11 次起触发限流 429", firstLimited > 10 && firstLimited <= 12, "firstLimited=" + firstLimited);
+ok("429 带 Retry-After 头", !!limitedResp && Number(limitedResp.headers.get("retry-after")) > 0);
+ok("限流后写入跨实例封禁标记", !!(await env.KV.get("blk:" + IP)));
+const afterBlk = await call("GET", "/", undefined, null, { "cf-connecting-ip": IP });
+ok("被封 IP 访问页面也 429", afterBlk.status === 429, afterBlk.status);
+const otherIp = await call("GET", "/", undefined, null, { "cf-connecting-ip": "203.0.113.88" });
+ok("其他 IP 不受影响", otherIp.status === 200, otherIp.status);
 
 console.log("\n结果: " + pass + " 通过, " + fail + " 失败");
 process.exit(fail ? 1 : 0);

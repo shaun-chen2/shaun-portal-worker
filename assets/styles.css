@@ -65,6 +65,9 @@ html, body {
   border-radius: 10px;
 }
 .login-card h1 { margin: 6px 0 4px; font-size: 22px; }
+/* Turnstile 人机验证：预留高度，避免脚本加载完再撑开导致按钮跳动 */
+.ts-wrap { min-height: 65px; margin: 0 0 8px; display: flex; justify-content: center; }
+.ts-wrap > div { width: 100%; }
 .login-card .sub { margin: 0 0 22px; color: var(--muted); font-size: 13px; }
 .login-card input {
   width: 100%;
@@ -301,6 +304,17 @@ html, body {
 }
 .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,.18); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+/* 页内弹窗（替代原生 confirm/alert/prompt，规避浏览器「阻止所有弹窗」） */
+.dlg-card { max-width: 400px; }
+.dlg-msg { margin: -6px 0 18px; font-size: 13px; line-height: 1.7; color: var(--muted); word-break: break-word; }
+.dlg-input {
+  width: 100%; margin: 0 0 16px; padding: 11px 13px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); font-size: 14px; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.dlg-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,140,255,.18); }
+.primary.danger-solid { background: linear-gradient(135deg, #ff6b6b, #e5484d); }
 
 @media (max-width: 560px) {
   .topbar { padding: 14px 16px; }

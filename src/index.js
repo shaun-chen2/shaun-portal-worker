@@ -53,11 +53,10 @@ function getCookie(request, name) {
 function sessionCookie(value, maxAge) {
   return `sid=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
-function json(obj, status = 200) {
-  return new Response(JSON.stringify(obj), {
-    status,
-    headers: { "content-type": "application/json; charset=utf-8" },
-  });
+function json(obj, status = 200, extra) {
+  const headers = { "content-type": "application/json; charset=utf-8" };
+  if (extra) for (const k in extra) headers[k] = extra[k];
+  return new Response(JSON.stringify(obj), { status, headers });
 }
 function b64urlEncode(str) {
   return btoa(unescape(encodeURIComponent(str)))
@@ -163,12 +162,39 @@ function seedForAdmin() {
   return { folders };
 }
 
+// ---------- 人机验证（Cloudflare Turnstile）----------
+// 登录 / 注册必须带有效 token；未配置 secret 时放行（避免把自己锁在门外），并在日志里留痕。
+async function verifyTurnstile(request, token, env) {
+  const secret = env.TURNSTILE_SECRET;
+  if (!secret) {
+    console.warn("TURNSTILE_SECRET 未配置，已跳过人机验证");
+    return true;
+  }
+  if (!token || typeof token !== "string" || token.length > 2048) return false;
+  const body = new URLSearchParams({ secret, response: token });
+  const ip = request.headers.get("cf-connecting-ip");
+  if (ip) body.set("remoteip", ip);
+  try {
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body,
+    });
+    const j = await r.json();
+    return j.success === true;
+  } catch (e) {
+    // 校验服务不可用时按失败处理，宁可拦住也不放机器人过去
+    return false;
+  }
+}
+
 async function handleLogin(request, env) {
   let body = {};
   try { body = await request.json(); } catch (e) { body = {}; }
   const user = (body.username || "").trim();
   const pass = body.password || "";
   if (!user || !pass) return json({ error: "missing" }, 400);
+  if (!(await verifyTurnstile(request, body.cfToken, env))) return json({ error: "captcha" }, 403);
 
   // 主账号（惰性初始化）
   if (user === env.AUTH_USERNAME) {
@@ -213,8 +239,11 @@ async function handleRegister(request, env) {
   const pass = body.password || "";
   if (!user || !pass) return json({ error: "missing" }, 400);
   if (user.length < 2 || user.length > 32) return json({ error: "username_length" }, 400);
+  // 只允许文字（含中文）、数字、下划线、点、连字符；挡掉空字节与控制字符这类畸形探测
+  if (!/^[\p{L}\p{N}_.-]+$/u.test(user)) return json({ error: "username_charset" }, 400);
   if (user === env.AUTH_USERNAME) return json({ error: "reserved" }, 400);
   if (pass.length < 4) return json({ error: "password_short" }, 400);
+  if (!(await verifyTurnstile(request, body.cfToken, env))) return json({ error: "captcha" }, 403);
 
   if (await getAccount(env, user)) return json({ error: "username_taken" }, 400);
 
@@ -431,18 +460,93 @@ async function handleAdminRole(request, env, user, target) {
   return json({ ok: true, role });
 }
 
+// ---------- 边缘防护 ----------
+// 背景：站点被自动化扫描器持续探测（/api/...、/h5/、/shouye.html、/.env、.aws/credentials.bak 等），
+// 这些请求 100% 是 404，但每一个都会消耗一次 Worker 调用，还可能触发 KV / GitHub 请求。
+// 策略：只放行站点真实存在的路径，其余在路由最前面直接 404；再叠加 UA 识别与按 IP 限流。
+
+// 站点真实路由（改动路由时记得同步这里）
+const KNOWN_EXACT = new Set([
+  "/", "/login", "/register", "/logout", "/favicon.ico", "/vendor/gifenc.js",
+  "/me", "/data", "/gallery", "/upload", "/admin/accounts", "/folders",
+]);
+const KNOWN_PREFIX = ["/assets/", "/admin/accounts/", "/folders/", "/sites/"];
+
+function isKnownPath(p) {
+  if (KNOWN_EXACT.has(p)) return true;
+  for (const pre of KNOWN_PREFIX) if (p.startsWith(pre) && p.length > pre.length) return true;
+  return false;
+}
+
+// 明显的扫描器 / 脚本 UA（浏览器一律带 Mozilla/...）
+const SCAN_UA_RE = new RegExp(
+  "(sqlmap|nikto|nmap|masscan|zgrab|nuclei|dirsearch|gobuster|feroxbuster|ffuf|wfuzz" +
+  "|python-requests|python-urllib|aiohttp|scrapy|go-http-client|curl/|wget/|libwww-perl" +
+  "|okhttp|java/|axios/|postmanruntime|insomnia|headlesschrome)",
+  "i"
+);
+
+// 固定窗口限流：普通 120 次/分、登录注册 10 次/分（同一 IP）
+const RL_WINDOW = 60000;
+const RL_MAX = 120;
+const RL_MAX_SENSITIVE = 10;
+const rlMap = new Map();
+
+function rlHit(ip, sensitive) {
+  const now = Date.now();
+  let e = rlMap.get(ip);
+  if (!e) {
+    e = { w: now, n: 0, sw: now, sn: 0 };
+    rlMap.set(ip, e);
+    if (rlMap.size > 4000) {
+      for (const [k, v] of rlMap) if (now - v.w > RL_WINDOW * 3) rlMap.delete(k);
+    }
+  }
+  if (now - e.w > RL_WINDOW) { e.w = now; e.n = 0; }
+  if (now - e.sw > RL_WINDOW) { e.sw = now; e.sn = 0; }
+  e.n++;
+  if (sensitive) e.sn++;
+  if (e.n > RL_MAX) return Math.ceil((e.w + RL_WINDOW - now) / 1000) || 1;
+  if (e.sn > RL_MAX_SENSITIVE) return Math.ceil((e.sw + RL_WINDOW - now) / 1000) || 1;
+  return 0;
+}
+
+function tooMany(sec) {
+  return json({ error: "rate_limited", retryAfter: sec }, 429, { "retry-after": String(sec) });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const p = url.pathname;
     const method = request.method;
 
+    // 未知路径直接 404：扫描器不该进入任何业务逻辑
+    if (!isKnownPath(p)) return new Response("Not Found", { status: 404 });
+
+    const isAsset = p.startsWith("/assets/");
+    if (!isAsset) {
+      const ua = request.headers.get("user-agent") || "";
+      if (!ua || SCAN_UA_RE.test(ua)) return new Response("Forbidden", { status: 403 });
+
+      const ip = request.headers.get("cf-connecting-ip") || "";
+      if (ip) {
+        // KV 只做跨实例的「已封禁」标记：命中才写，平时只读，省配额
+        if (env.KV && (await env.KV.get("blk:" + ip))) return tooMany(600);
+        const wait = rlHit(ip, (p === "/login" || p === "/register") && method === "POST");
+        if (wait) {
+          if (env.KV) await env.KV.put("blk:" + ip, "1", { expirationTtl: 600 });
+          return tooMany(wait);
+        }
+      }
+    }
+
     if (p === "/login" && method === "POST") return await handleLogin(request, env);
     if (p === "/register" && method === "POST") return await handleRegister(request, env);
     if (p === "/logout") {
       return new Response("", { status: 200, headers: { "Set-Cookie": sessionCookie("", 0) } });
     }
-    if (p === "/favicon.ico") return new Response("", { status: 204 });
+    if (p === "/favicon.ico") return new Response(null, { status: 204 });
 
     // 静态资源：gifenc 编码库（同源托管，避免第三方 CDN 不可用 / 模块格式不一致）
     if (p === "/vendor/gifenc.js" && (method === "GET" || method === "HEAD")) {
@@ -489,6 +593,13 @@ export default {
       const u = await authUser(request, env);
       if (!u) return json({ error: "unauthorized" }, 401);
       if (p === "/admin/accounts" && method === "GET") return await handleAdminAccounts(request, env, u);
+      if (p === "/admin/accounts/delete" && method === "POST") {
+        let body = {};
+        try { body = await request.json(); } catch (e) {}
+        const target = String(body.username || "");
+        if (!target) return json({ error: "missing" }, 400);
+        return await handleAdminDeleteAccount(request, env, u, target);
+      }
       const accMatch = p.match(/^\/admin\/accounts\/([^/]+)$/);
       if (accMatch) {
         const target = decodeURIComponent(accMatch[1]);

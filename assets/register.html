@@ -14,16 +14,23 @@
       <p class="sub">开放注册，填用户名和密码即可</p>
       <input id="username" type="text" placeholder="用户名（2-32 字）" autocomplete="username" required />
       <input id="password" type="password" placeholder="密码（至少 4 位）" autocomplete="new-password" required />
+      <!-- 人机验证：Cloudflare Turnstile（sitekey 为公开标识，可放在页面里） -->
+      <div class="ts-wrap"><div class="cf-turnstile" data-sitekey="0x4AAAAAAGKGiUaR0DzUbDRO" data-theme="dark" data-language="zh-cn" data-size="flexible"></div></div>
       <button type="submit" id="regBtn">注 册</button>
       <p id="regError" class="error" hidden></p>
       <p class="alt"><a href="/">已有账号？去登录</a></p>
     </form>
   </section>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script>
     const errEl = document.getElementById("regError");
     function showErr(msg) {
       errEl.textContent = msg;
       errEl.hidden = false;
+    }
+    function tsToken() {
+      const el = document.querySelector('input[name="cf-turnstile-response"]');
+      return el ? el.value : "";
     }
     document.getElementById("regForm").addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -31,13 +38,15 @@
       const password = document.getElementById("password").value;
       const btn = document.getElementById("regBtn");
       errEl.hidden = true;
+      // 没有 token 也照样提交，由服务端判定
+      const token = tsToken();
       btn.disabled = true;
       btn.textContent = "注册中…";
       try {
         const r = await fetch("/register", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ username, password }),
+          body: JSON.stringify({ username, password, cfToken: token }),
         });
         if (r.ok) {
           location.href = "/";
@@ -50,8 +59,10 @@
           reserved: "该用户名已被保留",
           password_short: "密码至少 4 位",
           username_taken: "用户名已被占用",
+          captcha: "人机验证未通过，请刷新页面后重试",
         };
         showErr(map[j.error] || "注册失败，请重试");
+        if (j.error === "captcha" && window.turnstile) window.turnstile.reset();
       } catch (e) {
         showErr("网络错误，请重试");
       } finally {
