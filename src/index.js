@@ -6,7 +6,8 @@ import { LOGIN_HTML, REG_HTML, DASH_HTML, GIFENC_JS } from "./ui.js";
 import { SEED_DATA } from "./data.js";
 
 const SESSION_MAX_AGE = 7 * 24 * 3600; // 7 天
-const MAX_UPLOAD_B64 = 28 * 1000 * 1000; // 上传体积上限（base64 前约 21MB）
+const MAX_UPLOAD_B64 = 28 * 1000 * 1000; // 上传体积上限（base64 前约 20MB）
+const MAX_FILE_BYTES = 20 * 1024 * 1024; // 与前端提示保持一致，仅用于校验与报错文案
 
 async function sha256Hex(str) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
@@ -278,16 +279,66 @@ function findSite(data, siteId) {
   return null;
 }
 
+// ---------- 上传入参清洗 ----------
+// 扩展名只保留字母数字（最长 8 位）：它会被拼进存储路径，绝不能带 / 或 ..
+function sanitizeExt(raw, type, name) {
+  let e = String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+  if (!e) {
+    const m = String(name || "").match(/\.([a-z0-9]{1,8})$/i);
+    if (m) e = m[1].toLowerCase();
+  }
+  if (!e) {
+    const sub = String(type || "").split("/")[1] || "";
+    e = sub.split("+")[0].replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+  }
+  return e;
+}
+function sanitizeType(raw) {
+  const t = String(raw || "").toLowerCase().trim();
+  return /^[a-z0-9][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+-]*$/.test(t) && t.length <= 100
+    ? t
+    : "application/octet-stream";
+}
+// 目录只用于展示与分组，不参与存储路径；去掉空段、. 与 ..，限制层级和长度
+function sanitizeFolder(raw) {
+  const parts = String(raw || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((s) => s.replace(/[\u0000-\u001f\u007f]/g, "").trim())
+    .filter((s) => s && s !== "." && s !== "..")
+    .slice(0, 8)
+    .map((s) => s.slice(0, 40));
+  return parts.join("/").slice(0, 200);
+}
+// 可在浏览器里直接打开的类型；其余一律 octet-stream + attachment。
+// 关键：html / svg / xml 绝不内联 —— 资源与本站同源，内联即存储型 XSS。
+const INLINE_TYPES = new Set([
+  "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp", "image/x-icon",
+  "application/pdf", "video/mp4", "video/webm", "audio/mpeg", "audio/ogg", "audio/wav",
+  "text/plain", "text/markdown", "application/json",
+]);
+const SANDBOX_TYPES = new Set(["text/html", "application/xhtml+xml", "image/svg+xml", "text/xml", "application/xml"]);
+// base64 长度推算原始字节数（去掉换行与补位符）
+function b64Bytes(data) {
+  const s = String(data || "").replace(/[\r\n\s]/g, "");
+  const pad = s.endsWith("==") ? 2 : s.endsWith("=") ? 1 : 0;
+  return Math.max(0, Math.floor((s.length * 3) / 4) - pad);
+}
+
 // ---------- 上传资源（GitHub 私人仓库）----------
 async function handleUpload(request, env, user) {
   let body = {};
   try { body = await request.json(); } catch (e) { return json({ error: "bad_body" }, 400); }
-  const { name, visibility, data, type, ext } = body;
-  if (!data || !type || !ext) return json({ error: "missing" }, 400);
+  const { name, visibility, data } = body;
+  if (!data || typeof data !== "string") return json({ error: "missing" }, 400);
   if (visibility !== "public" && visibility !== "private") return json({ error: "visibility" }, 400);
-  if (data.length > MAX_UPLOAD_B64) return json({ error: "too_large" }, 413);
+  if (data.length > MAX_UPLOAD_B64) return json({ error: "too_large", maxMB: MAX_FILE_BYTES / 1024 / 1024 }, 413);
+  const type = sanitizeType(body.type);
+  const ext = sanitizeExt(body.ext, type, name);
+  const folder = sanitizeFolder(body.folder);
+  const saveName = String(name || "未命名").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120) || "未命名";
+  const size = b64Bytes(data);
   const id = uuid();
-  const safeName = (name || "未命名").slice(0, 60);
   const path = `assets/${visibility}/${user.username}/${id}.${ext}`;
   try {
     await ghUpload(env, path, data, `upload ${visibility} ${id}`);
@@ -298,15 +349,17 @@ async function handleUpload(request, env, user) {
   gallery.push({
     id,
     owner: user.username,
-    name: safeName,
+    name: saveName,
     type,
     ext,
+    size,
+    folder,
     visibility,
     path,
     createdAt: Date.now(),
   });
   await putGallery(env, gallery);
-  return json({ id });
+  return json({ id, name: saveName, type, ext, size, folder, url: `/assets/${id}.${ext}` });
 }
 // 取单条资源（强制可见性）
 // 由资源元数据推导下载文件名（去掉文件系统非法字符，补上扩展名）
@@ -315,7 +368,7 @@ function assetFileName(item) {
     String(item.name || "资源")
       .replace(/[\\/:*?"<>|\r\n\t]/g, "_")
       .trim()
-      .slice(0, 60) || "资源";
+      .slice(0, 120) || "资源";
   const ext = String(item.ext || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   if (ext && !base.toLowerCase().endsWith("." + ext)) return base + "." + ext;
   return base;
@@ -356,9 +409,16 @@ async function handleAsset(request, env, user, id) {
   if (!r || r.status === 404) return assetError(404, "资源不存在", "文件已从存储中移除。");
   const buf = await r.arrayBuffer();
   const headers = new Headers();
-  headers.set("content-type", item.type || "application/octet-stream");
+  const declared = String(item.type || "").toLowerCase();
+  const inlineable = INLINE_TYPES.has(declared);
+  const ext = String(item.ext || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  // 非白名单类型一律按二进制下发：浏览器不会把它当页面执行，同源也就没有 XSS 面
+  headers.set("content-type", inlineable ? declared : "application/octet-stream");
   headers.set("x-content-type-options", "nosniff");
   headers.set("content-length", String(buf.byteLength));
+  if (SANDBOX_TYPES.has(declared)) {
+    headers.set("content-security-policy", "sandbox; default-src 'none'");
+  }
   if (isPublic) {
     // 公开资源允许任意站点 / Markdown 渲染器跨域引用
     headers.set("Cache-Control", "public, max-age=3600");
@@ -368,10 +428,10 @@ async function handleAsset(request, env, user, id) {
     // 私人资源禁止缓存，避免跨用户／跨设备泄漏
     headers.set("Cache-Control", "private, no-store");
   }
-  // ?dl=1 强制作为附件下载，并给出中文安全的文件名（RFC 5987）
+  // ?dl=1 强制作为附件下载，并给出中文安全的文件名（RFC 5987）。
+  // 非内联类型（html / svg / 压缩包 / 可执行文件等）无论有无参数都强制下载。
   const dl = new URL(request.url).searchParams.get("dl");
-  if (dl === "1") {
-    const ext = String(item.ext || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (dl === "1" || !inlineable) {
     const fallback = "asset" + (ext ? "." + ext : "");
     headers.set(
       "Content-Disposition",
@@ -399,8 +459,8 @@ async function handleGalleryList(request, env, user) {
   const gallery = await getGallery(env);
   const items = gallery
     .filter((x) => x.visibility === "public" || x.owner === user.username)
-    .map(({ id, owner, name, type, ext, visibility, createdAt }) => ({
-      id, owner, name, type, ext, visibility, createdAt,
+    .map(({ id, owner, name, type, ext, size, folder, visibility, createdAt }) => ({
+      id, owner, name, type, ext, size: size || 0, folder: folder || "", visibility, createdAt,
     }))
     .sort((a, b) => b.createdAt - a.createdAt);
   return json({ items });

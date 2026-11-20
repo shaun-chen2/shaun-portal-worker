@@ -27,6 +27,11 @@
         <span class="feat-title">图片上传</span>
         <span class="feat-sub">存到私人仓库，可选公开</span>
       </button>
+      <button class="feature" id="featFile">
+        <span class="feat-ico">📁</span>
+        <span class="feat-title">文件 / 文件夹</span>
+        <span class="feat-sub">批量上传，保留目录结构</span>
+      </button>
       <button class="feature" id="featVideo">
         <span class="feat-ico">🎞️</span>
         <span class="feat-title">视频转 GIF</span>
@@ -49,8 +54,8 @@
     <!-- 资源图库 -->
     <section class="gallery">
       <h2 class="sec-title">我的资源</h2>
-      <div id="myGallery" class="grid gallery-grid"></div>
-      <p id="myEmpty" class="empty sm">还没有上传，点上方「图片上传」试试</p>
+      <div id="myGallery" class="gallery-body"></div>
+      <p id="myEmpty" class="empty sm">还没有上传，点上方「文件 / 文件夹」或「图片上传」试试</p>
 
       <h2 class="sec-title collapsible" id="publicToggle">公开内容 <span class="caret">▸</span> <span class="muted" id="pubHint">(点击展开)</span></h2>
       <div id="publicGallery" class="grid gallery-grid" hidden></div>
@@ -88,6 +93,36 @@
           <button type="submit" class="primary" id="imgSubmit">上传</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- 文件 / 文件夹上传弹窗 -->
+  <div id="fileModal" class="modal" hidden>
+    <div class="modal-card wide">
+      <h3>文件 / 文件夹上传</h3>
+      <div id="drop" class="drop">
+        <span class="drop-ico">⇪</span>
+        <b>把文件或文件夹拖到这里</b>
+        <span class="drop-sub">单个文件不超过 20MB，可一次选多个；文件夹会保留层级</span>
+        <span class="drop-acts">
+          <button type="button" class="ghost sm" id="pickFiles">选择文件</button>
+          <button type="button" class="ghost sm" id="pickDir">选择文件夹</button>
+        </span>
+      </div>
+      <input id="filePick" type="file" multiple hidden />
+      <input id="dirPick" type="file" webkitdirectory directory multiple hidden />
+      <div id="upList" class="up-list" hidden></div>
+      <div class="field" style="margin-top:14px"><span>可见性</span>
+        <label class="radio"><input type="radio" name="fileVis" value="private" checked /> 私人（仅本人可见）</label>
+        <label class="radio"><input type="radio" name="fileVis" value="public" /> 公开（任何人凭链接可下载）</label>
+      </div>
+      <div id="upBar" class="progress" hidden><div id="upBarFill"></div><span id="upBarText">0%</span></div>
+      <div id="fileMsg" class="error" hidden></div>
+      <div class="modal-actions">
+        <button type="button" class="ghost" data-close>取消</button>
+        <button type="button" class="ghost" id="upClear">清空</button>
+        <button type="button" class="primary" id="upStart" disabled>上传</button>
+      </div>
     </div>
   </div>
 
@@ -300,14 +335,44 @@
     }
 
     // ---------- 图库 ----------
+    function fmtSize(n) {
+      n = Number(n) || 0;
+      if (!n) return "";
+      const u = ["B", "KB", "MB", "GB"];
+      let i = 0, v = n;
+      while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+      return (i ? v.toFixed(v >= 10 ? 0 : 1) : String(v)) + " " + u[i];
+    }
+    // 只有位图用 <img> 预览；svg 一律走下载，避免同源脚本执行
+    function isImageAsset(it) {
+      return /^image\//.test(it.type || "") && /^(png|jpe?g|gif|webp|avif|bmp|ico)$/i.test(it.ext || "");
+    }
+    // 按上传目录分组；完全没有目录信息时保持平铺
+    function groupsOf(items) {
+      if (!items.some((x) => x.folder)) return [{ title: "", items }];
+      const map = new Map();
+      for (const it of items) {
+        const k = it.folder || "";
+        if (!map.has(k)) map.set(k, []);
+        map.get(k).push(it);
+      }
+      return [...map.keys()]
+        .sort((a, b) => (a || "\uffff").localeCompare(b || "\uffff"))
+        .map((k) => ({ title: k || "未分组", items: map.get(k) }));
+    }
     async function loadGallery() {
       const { items } = await api("/gallery");
       const mine = items.filter((x) => x.owner === state.me.username);
-      // 「公开内容」只放别人的公开资源；自己的公开图已在「我的资源」里，避免重复展示
+      // 「公开内容」只放别人的公开资源；自己的公开资源已在「我的资源」里，避免重复展示
       const pub = items.filter((x) => x.visibility === "public" && x.owner !== state.me.username);
       const myEl = document.getElementById("myGallery");
       const pubEl = document.getElementById("publicGallery");
-      myEl.innerHTML = mine.map(galleryCard).join("") || "";
+      myEl.innerHTML = groupsOf(mine).map((g) =>
+        (g.title
+          ? '<h3 class="sec-sub">' + escapeHtml(g.title) + '<span class="count">' + g.items.length + "</span></h3>"
+          : "") +
+        '<div class="grid gallery-grid">' + g.items.map(galleryCard).join("") + "</div>"
+      ).join("");
       document.getElementById("myEmpty").hidden = mine.length > 0;
       document.getElementById("publicToggle").hidden = pub.length === 0;
       pubEl.innerHTML = pub.map(galleryCard).join("") || "";
@@ -432,17 +497,27 @@
     function galleryCard(it) {
       const isMine = it.owner === state.me.username;
       const url = "/assets/" + it.id;
+      const img = isImageAsset(it);
+      const extLabel = String(it.ext || "file").toUpperCase().slice(0, 5);
       return (
-        '<div class="g-card">' +
-        '<img src="' + url + '" alt="' + escapeHtml(it.name) + '" loading="lazy" ' +
-        'onerror="this.parentNode.classList.add(\'broken\')" />' +
+        '<div class="g-card' + (img ? "" : " g-doc") + '">' +
+        (img
+          ? '<img src="' + url + '" alt="' + escapeHtml(it.name) + '" loading="lazy" ' +
+            'onerror="this.parentNode.classList.add(\'broken\')" />'
+          : '<div class="g-file"><span class="f-ext">' + escapeHtml(extLabel) + "</span></div>") +
         '<div class="g-meta"><span class="g-name" title="' + escapeHtml(it.name) + '">' + escapeHtml(it.name) + "</span>" +
         '<span class="badge ' + (it.visibility === "public" ? "pub" : "pri") + '">' + (it.visibility === "public" ? "公开" : "私人") + "</span></div>" +
+        (it.folder || it.size
+          ? '<div class="g-sub">' +
+            (it.folder ? '<span class="g-folder" title="' + escapeHtml(it.folder) + '">📁 ' + escapeHtml(it.folder) + "</span>" : "") +
+            (it.size ? '<span class="g-size">' + fmtSize(it.size) + "</span>" : "") +
+            "</div>"
+          : "") +
         (isMine
           ? '<div class="g-actions">' +
             '<a class="g-act" href="' + url + '?dl=1" download="' + escapeHtml(safeFileName(it)) + '" title="下载原文件">下载</a>' +
             '<button class="g-act" type="button" data-copy="' + it.id + '" data-vis="' + it.visibility + '" data-ext="' + escapeHtml(it.ext || "") + '" title="复制直链（知道链接即可打开）">链接</button>' +
-            (it.visibility === "public"
+            (it.visibility === "public" && img
               ? '<button class="g-act" type="button" data-copymd="' + it.id + '" data-ext="' + escapeHtml(it.ext || "") + '" title="复制 Markdown 图片语法：![](链接)">MD</button>'
               : "") +
             "</div>"
@@ -546,6 +621,196 @@
         show(msg);
       }
     });
+
+    // ---------- 文件 / 文件夹上传 ----------
+    const MAX_FILE = 20 * 1024 * 1024;
+    const upState = { items: [], busy: false };
+    const UP_LABEL = { wait: "待上传", run: "上传中", ok: "完成", err: "失败" };
+    const UP_ERR = {
+      too_large: "超过 20MB", upload_failed: "存储写入失败",
+      bad_body: "请求格式错误", visibility: "可见性参数错误",
+    };
+
+    function dirOf(rel) {
+      const s = String(rel || "").replace(/\\/g, "/");
+      const i = s.lastIndexOf("/");
+      return i > 0 ? s.slice(0, i) : "";
+    }
+    function addUpItems(pairs) {
+      for (const p of pairs) {
+        const f = p.file;
+        if (!f) continue;
+        if (f.size > MAX_FILE) { toast(f.name + " 超过 20MB，已跳过"); continue; }
+        if (upState.items.some((x) => x.file === f)) continue;
+        upState.items.push({ file: f, rel: p.rel || f.webkitRelativePath || "", status: "wait", error: "" });
+      }
+      renderUpList();
+    }
+    function addUpFiles(list) {
+      addUpItems(Array.from(list || []).map((f) => ({ file: f, rel: f.webkitRelativePath || "" })));
+    }
+    function renderUpList() {
+      const box = document.getElementById("upList");
+      box.hidden = upState.items.length === 0;
+      box.innerHTML = upState.items.map((it, i) =>
+        '<div class="up-row">' +
+        '<span class="up-name" title="' + escapeHtml(it.error || it.rel || it.file.name) + '">' +
+        escapeHtml(it.rel || it.file.name) + "</span>" +
+        '<span class="up-size">' + fmtSize(it.file.size) + "</span>" +
+        '<span class="up-state ' + it.status + '">' + (UP_LABEL[it.status] || "") + "</span>" +
+        '<button class="icon danger" type="button" data-updel="' + i + '" title="移除">✕</button>' +
+        "</div>"
+      ).join("");
+      const btn = document.getElementById("upStart");
+      btn.disabled = upState.busy || upState.items.length === 0;
+      btn.textContent = upState.busy
+        ? "上传中…"
+        : upState.items.length ? "上传 " + upState.items.length + " 个" : "上传";
+    }
+    // 拖入文件夹时逐层读取（DataTransfer 只给 entry，需要递归拿文件）
+    async function readEntry(entry, prefix) {
+      if (entry.isFile) {
+        const file = await new Promise((res, rej) => entry.file(res, rej));
+        return [{ file, rel: prefix + entry.name }];
+      }
+      if (!entry.isDirectory) return [];
+      const reader = entry.createReader();
+      const all = [];
+      for (;;) {
+        const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        if (!batch.length) break;
+        all.push(...batch);
+      }
+      const out = [];
+      for (const e of all) out.push(...(await readEntry(e, prefix + entry.name + "/")));
+      return out;
+    }
+    async function filesFromDrop(dt) {
+      const entries = [];
+      for (const item of Array.from(dt.items || [])) {
+        const e = item.webkitGetAsEntry && item.webkitGetAsEntry();
+        if (e) entries.push(e);
+      }
+      if (!entries.length) return Array.from(dt.files || []).map((f) => ({ file: f, rel: "" }));
+      const out = [];
+      for (const e of entries) out.push(...(await readEntry(e, "")));
+      return out;
+    }
+    function closeFileModal() {
+      if (upState.busy) return;
+      hide(document.getElementById("fileModal"));
+      upState.items = [];
+      renderUpList();
+    }
+    async function startUpload() {
+      if (upState.busy || !upState.items.length) return;
+      const vis = document.querySelector('input[name="fileVis"]:checked').value;
+      const msg = document.getElementById("fileMsg");
+      const bar = document.getElementById("upBar");
+      hide(msg);
+      upState.busy = true;
+      renderUpList();
+      show(bar);
+      let okN = 0, failN = 0;
+      for (let i = 0; i < upState.items.length; i++) {
+        const it = upState.items[i];
+        if (it.status === "ok") continue;
+        it.status = "run";
+        it.error = "";
+        renderUpList();
+        try {
+          const b64 = await readFileAsDataURL(it.file);
+          const data = b64.slice(b64.indexOf(",") + 1);
+          const ext = (it.file.name.split(".").pop() || "bin").toLowerCase();
+          await api("/upload", {
+            method: "POST",
+            body: JSON.stringify({
+              name: it.file.name,
+              visibility: vis,
+              data,
+              type: it.file.type || "application/octet-stream",
+              ext,
+              folder: dirOf(it.rel),
+            }),
+          });
+          it.status = "ok";
+          okN++;
+        } catch (err) {
+          it.status = "err";
+          it.error = UP_ERR[err.message] || err.message || "上传失败";
+          failN++;
+        }
+        const p = Math.round(((i + 1) / upState.items.length) * 100);
+        document.getElementById("upBarFill").style.width = p + "%";
+        document.getElementById("upBarText").textContent = p + "%";
+        renderUpList();
+      }
+      upState.busy = false;
+      renderUpList();
+      await loadGallery();
+      if (failN) {
+        msg.textContent = okN + " 个成功，" + failN + " 个失败（可再次点上传重试失败的项）";
+        show(msg);
+        return;
+      }
+      hide(document.getElementById("fileModal"));
+      upState.items = [];
+      renderUpList();
+      hide(bar);
+      toast("已上传 " + okN + " 个文件");
+    }
+    document.getElementById("featFile").addEventListener("click", () => {
+      upState.items = [];
+      upState.busy = false;
+      hide(document.getElementById("fileMsg"));
+      hide(document.getElementById("upBar"));
+      document.getElementById("upBarFill").style.width = "0%";
+      document.getElementById("upBarText").textContent = "0%";
+      renderUpList();
+      show(document.getElementById("fileModal"));
+    });
+    document.getElementById("fileModal").addEventListener("click", (e) => {
+      if (e.target.id === "fileModal") closeFileModal();
+      if (e.target.dataset && e.target.dataset.close !== undefined) closeFileModal();
+    });
+    document.getElementById("pickFiles").addEventListener("click", () => document.getElementById("filePick").click());
+    document.getElementById("pickDir").addEventListener("click", () => document.getElementById("dirPick").click());
+    document.getElementById("filePick").addEventListener("change", (e) => { addUpFiles(e.target.files); e.target.value = ""; });
+    document.getElementById("dirPick").addEventListener("change", (e) => { addUpFiles(e.target.files); e.target.value = ""; });
+    const dropEl = document.getElementById("drop");
+    dropEl.addEventListener("click", (e) => {
+      if (!e.target.closest("button")) document.getElementById("filePick").click();
+    });
+    ["dragenter", "dragover"].forEach((ev) =>
+      dropEl.addEventListener(ev, (e) => { e.preventDefault(); dropEl.classList.add("on"); })
+    );
+    ["dragleave", "dragend"].forEach((ev) =>
+      dropEl.addEventListener(ev, () => dropEl.classList.remove("on"))
+    );
+    dropEl.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      dropEl.classList.remove("on");
+      addUpItems(await filesFromDrop(e.dataTransfer));
+    });
+    // 防止拖到弹窗外时浏览器直接打开文件
+    window.addEventListener("dragover", (e) => e.preventDefault());
+    window.addEventListener("drop", (e) => {
+      if (!e.target.closest || !e.target.closest("#drop")) e.preventDefault();
+    });
+    document.getElementById("upList").addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-updel]");
+      if (!b || upState.busy) return;
+      upState.items.splice(+b.dataset.updel, 1);
+      renderUpList();
+    });
+    document.getElementById("upClear").addEventListener("click", () => {
+      if (upState.busy) return;
+      upState.items = [];
+      hide(document.getElementById("upBar"));
+      hide(document.getElementById("fileMsg"));
+      renderUpList();
+    });
+    document.getElementById("upStart").addEventListener("click", startUpload);
 
     // ---------- 视频转 GIF ----------
     document.getElementById("featVideo").addEventListener("click", () => {

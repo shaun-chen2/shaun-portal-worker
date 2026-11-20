@@ -41,7 +41,15 @@ globalThis.fetch = async (url, opts) => {
   if (u.startsWith("https://raw.githubusercontent.com/")) {
     return new Response(ASSET_BYTES, { status: 200, headers: { "content-type": "image/gif" } });
   }
-  if (u.startsWith("https://api.github.com/")) return new Response("{}", { status: 404 });
+  if (u.startsWith("https://api.github.com/")) {
+    // contents API 写入：上传流程需要 2xx，否则会被判为 502
+    if (opts && String(opts.method || "").toUpperCase() === "PUT") {
+      return new Response(JSON.stringify({ content: { sha: "stub" } }), {
+        status: 201, headers: { "content-type": "application/json" },
+      });
+    }
+    return new Response("{}", { status: 404 });
+  }
   return realFetch(url, opts);
 };
 
@@ -212,6 +220,55 @@ const afterBlk = await call("GET", "/", undefined, null, { "cf-connecting-ip": I
 ok("被封 IP 访问页面也 429", afterBlk.status === 429, afterBlk.status);
 const otherIp = await call("GET", "/", undefined, null, { "cf-connecting-ip": "203.0.113.88" });
 ok("其他 IP 不受影响", otherIp.status === 200, otherIp.status);
+
+console.log("== 10. 文件 / 文件夹上传 ==");
+const HTML_BODY = "<script>alert(1)</script>";
+const htmlUp = await call("POST", "/upload", {
+  name: "说明.html", visibility: "public", folder: "../../etc/配置",
+  type: "text/html", ext: "../../../evil",
+  data: Buffer.from(HTML_BODY).toString("base64"),
+}, reg.cookie);
+ok("上传 html 200", htmlUp.status === 200, JSON.stringify(htmlUp.data));
+ok("扩展名被清洗为纯字母数字", htmlUp.data.ext === "evil", htmlUp.data.ext);
+ok("目录去掉 .. 且保留层级", htmlUp.data.folder === "etc/配置", htmlUp.data.folder);
+ok("返回原始大小", htmlUp.data.size === Buffer.byteLength(HTML_BODY), htmlUp.data.size);
+const htmlAsset = await raw("GET", "/assets/" + htmlUp.data.id, null);
+ok("html 不内联：octet-stream", htmlAsset.headers.get("content-type") === "application/octet-stream");
+ok("html 强制附件下载", (htmlAsset.headers.get("content-disposition") || "").startsWith("attachment;"));
+ok("html 带 CSP sandbox", (htmlAsset.headers.get("content-security-policy") || "").includes("sandbox"));
+ok("公开文件匿名可取", htmlAsset.status === 200);
+
+const pngUp = await call("POST", "/upload", {
+  name: "图.png", visibility: "public", type: "image/png", ext: "png",
+  data: "R0lGODlhAQABAAAAACw=",
+}, reg.cookie);
+const pngAsset = await raw("GET", "/assets/" + pngUp.data.id, null);
+ok("图片仍内联 image/png", (pngAsset.headers.get("content-type") || "").includes("image/png"));
+ok("图片无 Content-Disposition", pngAsset.headers.get("content-disposition") === null);
+
+const svgUp = await call("POST", "/upload", {
+  name: "图标.svg", visibility: "public", type: "image/svg+xml", ext: "svg",
+  data: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>').toString("base64"),
+}, reg.cookie);
+const svgAsset = await raw("GET", "/assets/" + svgUp.data.id, null);
+ok("svg 不内联（防同源脚本）", svgAsset.headers.get("content-type") === "application/octet-stream");
+ok("svg 带 CSP sandbox", (svgAsset.headers.get("content-security-policy") || "").includes("sandbox"));
+
+const noExt = await call("POST", "/upload", {
+  name: "报告.pdf", visibility: "private", data: "JVBERi0xLjQK",
+}, reg.cookie);
+ok("缺省 ext 时从文件名推断", noExt.data.ext === "pdf", noExt.data.ext);
+ok("缺省 type 归为 octet-stream", noExt.data.type === "application/octet-stream", noExt.data.type);
+
+const g3 = await call("GET", "/gallery", undefined, reg.cookie);
+const it3 = g3.data.items.find((x) => x.id === htmlUp.data.id);
+ok("列表返回 folder", it3 && it3.folder === "etc/配置", JSON.stringify(it3));
+ok("列表返回 size", it3 && it3.size > 0);
+ok("列表不含存储路径", it3 && it3.path === undefined);
+
+ok("缺 data -> 400", (await call("POST", "/upload", { name: "x", visibility: "public" }, reg.cookie)).status === 400);
+ok("未登录上传 -> 401", (await call("POST", "/upload", { name: "x", visibility: "public", data: "AAAA" }, null)).status === 401);
+ok("错误可见性 -> 400", (await call("POST", "/upload", { name: "x", visibility: "secret", data: "AAAA" }, reg.cookie)).status === 400);
 
 console.log("\n结果: " + pass + " 通过, " + fail + " 失败");
 process.exit(fail ? 1 : 0);

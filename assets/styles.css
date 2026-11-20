@@ -444,3 +444,59 @@ html, body {
 .field.opts > span { width: 100%; }
 .field.opts label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 .field.opts input { width: 64px; padding: 6px 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); }
+
+/* 我的资源：按目录分组 */
+.gallery-body { display: flex; flex-direction: column; gap: 18px; }
+.sec-sub {
+  font-size: 13px; color: var(--muted); font-weight: 600; margin: 2px 0 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sec-sub .count {
+  font-size: 12px; color: var(--muted); background: var(--card);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px;
+}
+/* 非图片资源：扩展名徽标代替缩略图 */
+.g-card .g-file {
+  height: 140px; display: grid; place-items: center;
+  background: linear-gradient(135deg, #1b2030, #14171f);
+}
+.f-ext {
+  font-size: 15px; font-weight: 700; letter-spacing: 1px; color: var(--accent);
+  padding: 8px 14px; border-radius: 10px;
+  border: 1px solid rgba(91, 140, 255, 0.45); background: rgba(91, 140, 255, 0.1);
+}
+.g-sub {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px 8px; font-size: 11px; color: var(--muted);
+}
+.g-folder { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-size { flex: none; margin-left: auto; }
+
+/* 拖拽上传区 */
+.drop {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 22px 16px; text-align: center; cursor: pointer;
+  border: 1.5px dashed var(--border); border-radius: var(--radius); background: var(--card);
+  transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop.on { border-color: var(--accent); background: var(--card-hover); }
+.drop-ico { font-size: 22px; line-height: 1; color: var(--accent); }
+.drop b { font-size: 14px; font-weight: 600; }
+.drop-sub { font-size: 12px; color: var(--muted); }
+.drop-acts { display: flex; gap: 8px; margin-top: 10px; }
+
+/* 上传队列 */
+.up-list {
+  margin-top: 12px; max-height: 190px; overflow: auto;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.up-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 9px; font-size: 12px;
+}
+.up-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-size { flex: none; color: var(--muted); }
+.up-state { flex: none; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+.up-state.run { color: var(--accent); border-color: rgba(91, 140, 255, 0.45); }
+.up-state.ok { color: #4ade80; border-color: rgba(34, 197, 94, 0.35); background: rgba(34, 197, 94, 0.12); }
+.up-state.err { color: var(--danger); border-color: rgba(255, 107, 107, 0.4); background: rgba(255, 107, 107, 0.1); }
